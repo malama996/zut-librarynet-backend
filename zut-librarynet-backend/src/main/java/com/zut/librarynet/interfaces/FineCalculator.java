@@ -1,0 +1,65 @@
+package com.zut.librarynet.interfaces;
+import com.zut.librarynet.models.Loan;
+
+/**
+ * INTERFACE: Defines contract for fine calculation
+ * This demonstrates ABSTRACTION - we know what it does, not how
+ */
+public interface FineCalculator {
+    double calculateFine(Loan loan);
+    String getFineDescription(Loan loan);
+    boolean isEligibleForFineWaiver(Loan loan);
+}
+DefaultFineCalculator.java:
+java
+package com.zut.librarynet.services;
+
+import com.zut.librarynet.interfaces.FineCalculator;
+import com.zut.librarynet.models.Loan;
+import com.zut.librarynet.models.Member;
+
+public class DefaultFineCalculator implements FineCalculator {
+
+    @Override
+    public double calculateFine(Loan loan) {
+        if (loan == null || !loan.isOverdue() || loan.getReturnDate() != null) {
+            return 0.0;
+        }
+
+        Member member = loan.getMember();
+        int daysOverdue = loan.getDaysOverdue();
+
+        // POLYMORPHISM: Member.calculateFine() is polymorphic
+        return member.calculateFine(daysOverdue);
+    }
+
+    @Override
+    public String getFineDescription(Loan loan) {
+        if (loan == null || !loan.isOverdue()) {
+            return "No fine applicable";
+        }
+
+        Member member = loan.getMember();
+        int daysOverdue = loan.getDaysOverdue();
+        double amount = calculateFine(loan);
+
+        return String.format("%s fine: ZMW %.2f for %d days overdue at ZMW %.2f/day",
+                member.getMemberType(), amount, daysOverdue,
+                member.calculateFine(1) / 1.0);
+    }
+
+    @Override
+    public boolean isEligibleForFineWaiver(Loan loan) {
+        if (loan == null || !loan.isOverdue()) {
+            return false;
+        }
+
+        // First-time offenders with less than 5 days overdue can request waiver
+        Member member = loan.getMember();
+        int daysOverdue = loan.getDaysOverdue();
+
+        return member.getUnpaidFines().isEmpty() && daysOverdue <= 5;
+    }
+}
+
+
