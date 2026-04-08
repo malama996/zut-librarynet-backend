@@ -40,16 +40,4 @@ public class ErrorResponse {
     public LocalDateTime getTimestamp() { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
 }
-Update sendErrorResponse in LibraryHandlers:
-protected void sendErrorResponse(Context ctx, HttpStatus status, String message) {
-    ErrorResponse error = new ErrorResponse(status.getCode(), message);
-    ctx.status(status);
-    ctx.json(error);
-}
-
-protected void sendErrorResponse(Context ctx, HttpStatus status, String message, String details) {
-    ErrorResponse error = new ErrorResponse(status.getCode(), message, details);
-    ctx.status(status);
-    ctx.json(error);
-}
 

@@ -1,0 +1,622 @@
+{
+  "info": {
+    "name": "ZUT LibraryNet API",
+    "description": "Complete API collection for ZUT LibraryNet Backend - 27 endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Public Endpoints (No Auth)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check if API is running"
+          },
+          "response": []
+        },
+        {
+          "name": "Register Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"student\",\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@zut.edu.zm\",\n  \"phone\": \"0977123456\",\n  \"studentId\": \"2024001\",\n  \"programme\": \"Computer Science\",\n  \"yearOfStudy\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/members/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "register"]
+            },
+            "description": "Register a new student member"
+          },
+          "response": []
+        },
+        {
+          "name": "Login Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberId\": \"{{memberId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/members/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "login"]
+            },
+            "description": "Login and get authentication token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Member Management",
+      "item": [
+        {
+          "name": "Get All Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members"]
+            },
+            "description": "Get all registered members"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Member by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/{{memberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "{{memberId}}"]
+            },
+            "description": "Get details of a specific member"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Resource Management",
+      "item": [
+        {
+          "name": "Add Book Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"book\",\n  \"title\": \"Java Programming: A Comprehensive Guide\",\n  \"publisher\": \"O'Reilly Media\",\n  \"author\": \"John Johnson\",\n  \"isbn\": \"978-1492077991\",\n  \"edition\": \"4th\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/add",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "add"]
+            },
+            "description": "Add a new book to the library"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Journal Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"journal\",\n  \"title\": \"Journal of Computer Science Research\",\n  \"publisher\": \"ACM\",\n  \"issn\": \"1234-5678\",\n  \"volume\": 15,\n  \"issue\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/add",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "add"]
+            },
+            "description": "Add a new journal to the library"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Digital Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"digital\",\n  \"title\": \"ZUT Digital Library Guide\",\n  \"publisher\": \"ZUT Press\",\n  \"url\": \"https://library.zut.edu.zm/digital\",\n  \"licenceExpiry\": \"2025-12-31\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/add",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "add"]
+            },
+            "description": "Add a new digital resource to the library"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resources",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources"]
+            },
+            "description": "Get all library resources"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Resource by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/{{resourceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "{{resourceId}}"]
+            },
+            "description": "Get details of a specific resource"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Available Resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/available",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "available"]
+            },
+            "description": "Get only available resources"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Resources by Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/type/book",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "type", "book"]
+            },
+            "description": "Get resources by type (book, journal, digital)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resources/search?q=Java",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "resources", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Java"
+                }
+              ]
+            },
+            "description": "Search resources by title, author, or publisher"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Loan Management",
+      "item": [
+        {
+          "name": "Borrow Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberId\": \"{{memberId}}\",\n  \"resourceId\": \"{{resourceId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/loans/borrow",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans", "borrow"]
+            },
+            "description": "Borrow a resource from the library"
+          },
+          "response": []
+        },
+        {
+          "name": "Return Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loanId\": \"{{loanId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/loans/{{loanId}}/return",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans", "{{loanId}}", "return"]
+            },
+            "description": "Return a borrowed resource"
+          },
+          "response": []
+        },
+        {
+          "name": "Extend Loan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loanId\": \"{{loanId}}\",\n  \"additionalDays\": 7\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/loans/{{loanId}}/extend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans", "{{loanId}}", "extend"]
+            },
+            "description": "Extend the due date of a loan"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Member Loans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/{{memberId}}/loans",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "{{memberId}}", "loans"]
+            },
+            "description": "Get all loans for a member"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Fine Management",
+      "item": [
+        {
+          "name": "Get Member Fines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/{{memberId}}/fines",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "{{memberId}}", "fines"]
+            },
+            "description": "Get all fines for a member"
+          },
+          "response": []
+        },
+        {
+          "name": "Pay Fine",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fineId\": \"{{fineId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/members/{{memberId}}/fines/{{fineId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "{{memberId}}", "fines", "{{fineId}}", "pay"]
+            },
+            "description": "Pay a fine"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Reservation Management",
+      "item": [
+        {
+          "name": "Create Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberId\": \"{{memberId}}\",\n  \"resourceId\": \"{{resourceId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservations"]
+            },
+            "description": "Reserve a library resource"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Member Reservations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/{{memberId}}/reservations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "{{memberId}}", "reservations"]
+            },
+            "description": "Get all reservations for a member"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Reservation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservations/{{reservationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservations", "{{reservationId}}"]
+            },
+            "description": "Cancel a reservation"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Queue Position",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservations/{{reservationId}}/queue-position",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservations", "{{reservationId}}", "queue-position"]
+            },
+            "description": "Get your position in the reservation queue"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Reports & Analytics",
+      "item": [
+        {
+          "name": "Get System Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/statistics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "statistics"]
+            },
+            "description": "Get overall library statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Overdue Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/overdue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "overdue"]
+            },
+            "description": "Get report of all overdue loans"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:7070"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "memberId",
+      "value": ""
+    },
+    {
+      "key": "resourceId",
+      "value": ""
+    },
+    {
+      "key": "loanId",
+      "value": ""
+    },
+    {
+      "key": "fineId",
+      "value": ""
+    },
+    {
+      "key": "reservationId",
+      "value": ""
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.zut.librarynet.exceptions.*;
 import com.zut.librarynet.models.*;
 import com.zut.librarynet.services.LibraryService;
+import com.zut.librarynet.services.AuthService;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 
@@ -56,7 +57,52 @@ public class LibraryHandlers {
             sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
         }
     }
+    // NEW: Member login to get authentication token
+    public void loginMember(Context ctx) {
+        try {
+            String body = ctx.body();
+            if (body == null || body.trim().isEmpty()) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Request body is required");
+                return;
+            }
 
+            Map<String, Object> data = gson.fromJson(body, Map.class);
+            
+            if (data == null) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Invalid JSON format");
+                return;
+            }
+
+            String memberId = (String) data.get("memberId");
+            if (memberId == null || memberId.trim().isEmpty()) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required field: memberId");
+                return;
+            }
+
+            // Verify member exists
+            Member member = service.getMember(memberId);
+            if (member == null) {
+                sendErrorResponse(ctx, HttpStatus.UNAUTHORIZED, "Invalid memberId");
+                return;
+            }
+
+            // Generate authentication token
+            String token = AuthService.generateToken(memberId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("token", "Bearer " + token);
+            response.put("memberId", memberId);
+            response.put("memberType", member.getMemberType());
+            response.put("name", member.getName());
+            response.put("message", "Login successful. Use token in Authorization header");
+
+            ctx.status(HttpStatus.OK).json(response);
+
+        } catch (Exception e) {
+            sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error: " + e.getMessage());
+        }
+    }
     public void getMember(Context ctx) {
         try {
             String memberId = ctx.pathParam("id");
@@ -395,6 +441,108 @@ public class LibraryHandlers {
             response.put("resources", resources.stream()
                     .map(this::resourceToMap)
                     .collect(java.util.stream.Collectors.toList()));
+
+            ctx.status(HttpStatus.OK).json(response);
+
+        } catch (Exception e) {
+            sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    // NEW: Search resources
+    public void searchResources(Context ctx) {
+        try {
+            String query = ctx.queryParam("q");
+            if (query == null || query.trim().isEmpty()) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Search query parameter 'q' is required");
+                return;
+            }
+
+            java.util.List<LibraryResource> results = service.searchResources(query);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("query", query);
+            response.put("count", results.size());
+            response.put("results", results.stream()
+                    .map(this::resourceToMap)
+                    .collect(java.util.stream.Collectors.toList()));
+
+            ctx.status(HttpStatus.OK).json(response);
+
+        } catch (Exception e) {
+            sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    // NEW: Get overdue report
+    public void getOverdueReport(Context ctx) {
+        try {
+            java.util.List<Loan> overdueLoans = service.getOverdueLoans();
+
+            double totalFinesOutstanding = overdueLoans.stream()
+                    .mapToDouble(Loan::calculateFine)
+                    .sum();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("generatedAt", LocalDateTime.now().toString());
+            response.put("totalOverdue", overdueLoans.size());
+            response.put("totalFinesOutstanding", totalFinesOutstanding);
+            response.put("overdueLoans", overdueLoans.stream()
+                    .map(this::loanToMap)
+                    .collect(java.util.stream.Collectors.toList()));
+
+            ctx.status(HttpStatus.OK).json(response);
+
+        } catch (Exception e) {
+            sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    // NEW: Extend loan
+    public void extendLoan(Context ctx) {
+        try {
+            String loanId = ctx.pathParam("id");
+            Map<String, Object> data = gson.fromJson(ctx.body(), Map.class);
+            
+            if (data == null || !data.containsKey("days")) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Request body must contain 'days' parameter");
+                return;
+            }
+
+            int days = ((Number) data.get("days")).intValue();
+            if (days <= 0) {
+                sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Days must be a positive integer");
+                return;
+            }
+
+            service.extendLoan(loanId, days);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", String.format("Loan extended by %d days", days));
+
+            ctx.status(HttpStatus.OK).json(response);
+
+        } catch (ResourceNotFoundException e) {
+            sendErrorResponse(ctx, HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {
+            sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    // NEW: Get reservation queue position
+    public void getReservationQueuePosition(Context ctx) {
+        try {
+            String reservationId = ctx.pathParam("id");
+            
+            // Find the reservation - need alternative approach since we can't query all
+            // For now, return a placeholder response
+            Map<String, Object> response = new HashMap<>();
+            response.put("reservationId", reservationId);
+            response.put("queuePosition", 1);
+            response.put("status", "QUEUED");
 
             ctx.status(HttpStatus.OK).json(response);
 

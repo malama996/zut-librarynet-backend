@@ -283,6 +283,46 @@ public class LibraryService {
                 .collect(Collectors.toList());
     }
 
+    // NEW: Search resources by title or author
+    public List<LibraryResource> searchResources(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        String lowerQuery = query.toLowerCase();
+        return resources.values().stream()
+                .filter(r -> {
+                    String title = r.getTitle().toLowerCase();
+                    String publisher = r.getPublisher().toLowerCase();
+                    
+                    // For books, also search by author
+                    if (r instanceof Book) {
+                        String author = ((Book) r).getAuthor().toLowerCase();
+                        return title.contains(lowerQuery) || author.contains(lowerQuery) || publisher.contains(lowerQuery);
+                    }
+                    
+                    return title.contains(lowerQuery) || publisher.contains(lowerQuery);
+                })
+                .collect(Collectors.toList());
+    }
+
+    // NEW: Get all overdue loans for reporting
+    public List<Loan> getOverdueLoans() {
+        return loans.values().stream()
+                .filter(Loan::isOverdue)
+                .collect(Collectors.toList());
+    }
+
+    // NEW: Extend loan period
+    public void extendLoan(String loanId, int additionalDays) throws LibraryException {
+        Loan loan = loans.get(loanId);
+        if (loan == null) {
+            throw new ResourceNotFoundException("Loan not found: " + loanId);
+        }
+        
+        loan.extendDueDate(additionalDays);
+    }
+
     public Map<String, Long> getStatistics() {
         Map<String, Long> stats = new HashMap<>();
         stats.put("totalMembers", (long) members.size());
@@ -293,102 +333,5 @@ public class LibraryService {
                 .filter(r -> r.getStatus().equals("PENDING"))
                 .count());
         return stats;
-    }
-}
-// Add these validation methods to LibraryService
-
-/**
- * BUSINESS RULE: Digital resources cannot be borrowed
- */
-private void validateResourceBorrowable(LibraryResource resource) throws ResourceNotAvailableException {
-    if (!resource.canBeBorrowed()) {
-        throw new ResourceNotAvailableException(
-                "Digital resources cannot be physically borrowed. " +
-                        "Access is available online at: " +
-                        ((DigitalResource) resource).getUrl());
-    }
-}
-
-/**
- * BUSINESS RULE: Member must not exceed borrow limit
- */
-private void validateBorrowLimit(Member member) throws BorrowLimitExceededException {
-    if (member.getActiveLoans().size() >= member.getMaxBorrowLimit()) {
-        throw new BorrowLimitExceededException(
-                String.format("%s has reached borrow limit of %d items",
-                        member.getMemberType(), member.getMaxBorrowLimit()));
-    }
-}
-
-/**
- * BUSINESS RULE: Member must not have unpaid fines > 50
- */
-private void validateFines(Member member) throws FinesOutstandingException {
-    double totalFines = member.getTotalUnpaidFines();
-    if (totalFines > 50) {
-        throw new FinesOutstandingException(
-                String.format("Member has unpaid fines of ZMW %.2f. " +
-                                "Maximum allowed is ZMW 50.00. Clear fines to borrow.",
-                        totalFines));
-    }
-}
-
-/**
- * BUSINESS RULE: Researcher loses borrowing privileges after 14 days overdue
- */
-private void validateResearcherPrivileges(ResearcherMember researcher) throws LibraryException {
-    if (!researcher.hasOverduePrivileges()) {
-        throw new LibraryException(
-                "Researcher has lost borrowing privileges due to overdue items " +
-                        "exceeding 14 days. Please return overdue items to restore privileges.");
-    }
-}
-
-/**
- * BUSINESS RULE: Student cannot borrow more than 3 items (enforced by getMaxBorrowLimit)
- * BUSINESS RULE: Lecturer cannot borrow more than 10 items (enforced by getMaxBorrowLimit)
- * BUSINESS RULE: Researcher cannot borrow more than 20 items (enforced by getMaxBorrowLimit)
- */
-
-// Update borrowResource method to use these validations
-public Loan borrowResource(String memberId, String resourceId) throws LibraryException {
-    Member member = members.get(memberId);
-    if (member == null) {
-        throw new ResourceNotFoundException("Member not found: " + memberId);
-    }
-
-    LibraryResource resource = resources.get(resourceId);
-    if (resource == null) {
-        throw new ResourceNotFoundException("Resource not found: " + resourceId);
-    }
-
-    // ENFORCE ALL BUSINESS RULES
-    validateResourceBorrowable(resource);
-    validateResourceAvailability(resource, resourceId);
-    validateFines(member);
-    validateBorrowLimit(member);
-
-    // Researcher-specific validation
-    if (member instanceof ResearcherMember) {
-        validateResearcherPrivileges((ResearcherMember) member);
-    }
-
-    // Create loan
-    Loan loan = new Loan(member, resource);
-    loans.put(loan.getId(), loan);
-    memberLoans.get(memberId).add(loan);
-
-    return loan;
-}
-
-private void validateResourceAvailability(LibraryResource resource, String resourceId)
-        throws ResourceNotAvailableException {
-    if (!resource.isAvailable()) {
-        Queue<Reservation> queue = reservationQueue.getQueueForResource(resourceId);
-        if (!queue.isEmpty()) {
-            throw new ResourceNotAvailableException(
-                    String.format("Resource is reserved. %d people are waiting in queue.", queue.size()));
-        }
-        throw new ResourceNotAvailableException("Resource is currently on loan");
     }
 }

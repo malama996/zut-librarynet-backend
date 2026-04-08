@@ -57,9 +57,11 @@ public abstract class Member {
         if (phone == null || phone.trim().isEmpty()) {
             throw new IllegalArgumentException("Phone cannot be empty");
         }
-        // Zambian phone number validation (basic)
-        if (!phone.matches("^09[7-9][0-9]{7}$")) {
-            throw new IllegalArgumentException("Invalid Zambian phone number. Format: 0977xxxxxx");
+        // Zambian phone number validation - accept any valid Zambian number format
+        // Valid formats: 0974123456, +260974123456, etc.
+        phone = phone.trim();
+        if (!phone.matches("^(\\+260|0)[0-9]{2,}$") || phone.length() < 10) {
+            throw new IllegalArgumentException("Invalid Zambian phone number");
         }
         return phone;
     }

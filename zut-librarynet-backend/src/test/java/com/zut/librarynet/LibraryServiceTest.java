@@ -411,4 +411,140 @@ public class LibraryServiceTest {
             service.registerMember("student", invalidPhone);
         });
     }
+
+    // TEST 21: Reservation queue notification
+    @Test
+    @Order(21)
+    void testReservationQueueNotification() throws LibraryException {
+        // Borrow book so it's unavailable
+        service.borrowResource(studentId, bookId);
+
+        // Create reservation for lecturer
+        Reservation reservation = service.createReservation(lecturerId, bookId);
+
+        // Return book - should trigger notification
+        Loan loan = service.getMemberLoans(studentId).get(0);
+        service.returnResource(loan.getId());
+
+        // Reservation should be notified
+        assertEquals("NOTIFIED", reservation.getStatus());
+    }
+
+    // TEST 22: Cannot reserve available resource
+    @Test
+    @Order(22)
+    void testCannotReserveAvailableResource() throws LibraryException {
+        // Resource is available (not borrowed)
+        assertThrows(ResourceAvailableException.class, () -> {
+            service.createReservation(lecturerId, bookId);
+        });
+    }
+
+    // TEST 23: Cannot duplicate reservation
+    @Test
+    @Order(23)
+    void testCannotDuplicateReservation() throws LibraryException {
+        // Borrow book
+        service.borrowResource(studentId, bookId);
+
+        // Create first reservation
+        service.createReservation(lecturerId, bookId);
+
+        // Create duplicate reservation
+        assertThrows(LibraryException.class, () -> {
+            service.createReservation(lecturerId, bookId);
+        });
+    }
+
+    // TEST 24: Cancel reservation
+    @Test
+    @Order(24)
+    void testCancelReservation() throws LibraryException {
+        // Borrow book
+        service.borrowResource(studentId, bookId);
+
+        // Create reservation
+        Reservation reservation = service.createReservation(lecturerId, bookId);
+
+        // Cancel reservation
+        service.cancelReservation(reservation.getId());
+
+        assertEquals("CANCELLED", reservation.getStatus());
+    }
+
+    // TEST 25: Pay fine
+    @Test
+    @Order(25)
+    void testPayFine() throws LibraryException {
+        Member student = service.getMember(studentId);
+
+        // Add a fine
+        Loan mockLoan = new Loan(student, service.getResource(bookId));
+        Fine fine = new Fine(mockLoan, 30.0);
+        student.addFine(fine);
+
+        assertEquals(30.0, student.getTotalUnpaidFines());
+
+        // Pay fine
+        service.payFine(studentId, fine.getId());
+
+        assertEquals(0.0, student.getTotalUnpaidFines());
+        assertTrue(fine.isPaid());
+    }
+
+    // TEST 26: Statistics endpoint
+    @Test
+    @Order(26)
+    void testGetStatistics() {
+        Map<String, Long> stats = service.getStatistics();
+
+        assertEquals(3, stats.get("totalMembers")); // student, lecturer, researcher
+        assertEquals(3, stats.get("totalResources")); // book, journal, digital
+        assertEquals(0, stats.get("activeLoans"));
+        assertEquals(3, stats.get("availableResources"));
+    }
+
+    // TEST 27: Get resources by type
+    @Test
+    @Order(27)
+    void testGetResourcesByType() {
+        List<LibraryResource> books = service.getResourcesByType("BOOK");
+        assertEquals(1, books.size());
+
+        List<LibraryResource> journals = service.getResourcesByType("JOURNAL");
+        assertEquals(1, journals.size());
+
+        List<LibraryResource> digital = service.getResourcesByType("DIGITAL");
+        assertEquals(1, digital.size());
+    }
+
+    // TEST 28: Loan cannot be returned twice
+    @Test
+    @Order(28)
+    void testCannotReturnLoanTwice() throws LibraryException {
+        Loan loan = service.borrowResource(studentId, bookId);
+        service.returnResource(loan.getId());
+
+        assertThrows(IllegalStateException.class, () -> {
+            service.returnResource(loan.getId());
+        });
+    }
+
+    // TEST 29: Invalid member ID in loan
+    @Test
+    @Order(29)
+    void testInvalidMemberInLoan() {
+        assertThrows(ResourceNotFoundException.class, () -> {
+            service.borrowResource("invalid-id", bookId);
+        });
+    }
+
+    // TEST 30: Invalid resource ID in loan
+    @Test
+    @Order(30)
+    void testInvalidResourceInLoan() {
+        assertThrows(ResourceNotFoundException.class, () -> {
+            service.borrowResource(studentId, "invalid-id");
+        });
+    }
 }

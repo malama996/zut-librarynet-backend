@@ -3,9 +3,9 @@ package com.zut.librarynet;
 
 import com.zut.librarynet.handlers.LibraryHandlers;
 import com.zut.librarynet.services.LibraryService;
+import com.zut.librarynet.services.AuthService;
 import io.javalin.Javalin;
 import io.javalin.http.HttpStatus;
-import io.javalin.json.JavalinJackson;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -23,30 +23,69 @@ public class Main {
 
         // Create Javalin app with configuration
         Javalin app = Javalin.create(config -> {
-            // JSON mapper configuration
-            config.jsonMapper(new JavalinJackson(objectMapper));
-
-            // CORS configuration for React frontend
-            config.plugins.enableCors(cors -> {
-                cors.add(it -> {
-                    it.allowHost("http://localhost:5173");
-                    it.allowHost("http://localhost:3000");
-                    it.allowHost("http://127.0.0.1:5173");
-                    it.allowCredentials(true);
-                    it.allowAllMethods = true;
-                    it.allowAllHeaders = true;
-                });
-            });
+            // Default content type
+            config.http.defaultContentType = "application/json";
 
             // Enable request logging for debugging
             config.requestLogger.http((ctx, ms) -> {
-                System.out.printf("[%s] %s %s (%d ms)%n",
+                System.out.printf("[%s] %s %s (%.2f ms)%n",
                         ctx.method(), ctx.path(), ctx.status(), ms);
             });
-
-            // Enable error handling
-            config.http.defaultContentType = "application/json";
         }).start(7070);
+
+        // Enable CORS headers manually
+        app.before(ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "*");
+            ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            ctx.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        });
+
+        // AUTHENTICATION MIDDLEWARE
+        // All endpoints except public ones require valid authentication token
+        app.before(ctx -> {
+            String path = ctx.path();
+            String method = ctx.req().getMethod();
+            
+            // OPTIONS and public endpoints bypass authentication
+            if (method.equals("OPTIONS") || AuthService.isPublicEndpoint(path)) {
+                return;
+            }
+            
+            // Check for Authorization header
+            String authorization = ctx.header("Authorization");
+            if (authorization == null) {
+                ctx.status(401);
+                ctx.json(java.util.Map.of(
+                    "error", true,
+                    "code", 401,
+                    "message", "Missing Authorization header",
+                    "timestamp", java.time.LocalDateTime.now().toString()
+                ));
+                ctx.skipRemainingHandlers();
+                return;
+            }
+            
+            // Validate token
+            String memberId = AuthService.validateToken(authorization);
+            if (memberId == null) {
+                ctx.status(401);
+                ctx.json(java.util.Map.of(
+                    "error", true,
+                    "code", 401,
+                    "message", "Invalid or expired token",
+                    "timestamp", java.time.LocalDateTime.now().toString()
+                ));
+                ctx.skipRemainingHandlers();
+                return;
+            }
+            
+            // Store memberId in context for later use
+            ctx.attribute("memberId", memberId);
+        });
+
+        app.options("/*", ctx -> {
+            ctx.status(200);
+        });
 
         // HEALTH CHECK ENDPOINT
         app.get("/health", ctx -> {
@@ -63,6 +102,7 @@ public class Main {
 
         // MEMBER ENDPOINTS
         app.post("/api/members/register", handlers::registerMember);
+        app.post("/api/members/login", handlers::loginMember);
         app.get("/api/members/{id}", handlers::getMember);
         app.get("/api/members", handlers::getAllMembers);
 
@@ -88,6 +128,10 @@ public class Main {
         // UTILITY ENDPOINTS
         app.get("/api/resources/available", handlers::getAvailableResources);
         app.get("/api/resources/type/{type}", handlers::getResourcesByType);
+        app.get("/api/resources/search", handlers::searchResources);
+        app.get("/api/reports/overdue", handlers::getOverdueReport);
+        app.post("/api/loans/{id}/extend", handlers::extendLoan);
+        app.get("/api/reservations/{id}/queue-position", handlers::getReservationQueuePosition);
 
         System.out.println("╔══════════════════════════════════════════════════════════╗");
         System.out.println("║     ZUT LibraryNet API - Running on http://localhost:7070    ║");
