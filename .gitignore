@@ -1,0 +1,42 @@
+# =====================
+# Logs
+# =====================
+logs/
+*.log
+
+# =====================
+# Dependencies
+# =====================
+node_modules/
+
+# =====================
+# Build outputs
+# =====================
+dist/
+target/
+
+# =====================
+# Environment / Secrets
+# =====================
+.env
+*.env
+
+# Firebase secret (VERY IMPORTANT)
+**/firebase-service-account.json
+
+# =====================
+# IDE files
+# =====================
+.idea/
+.vscode/
+*.iml
+
+# =====================
+# AI tools
+# =====================
+.claude/
+
+# =====================
+# OS files
+# =====================
+.DS_Store
