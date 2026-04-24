@@ -32,6 +32,18 @@ public abstract class Member {
         this.registrationDate = LocalDateTime.now();
     }
 
+    /** Constructor that accepts an external UID (Firebase UID) */
+    public Member(String id, String name, String email, String phone) {
+        this.id = id != null && !id.trim().isEmpty() ? id : UUID.randomUUID().toString();
+        this.name = validateName(name);
+        this.email = validateEmail(email);
+        this.phone = validatePhone(phone);
+        this.activeLoans = new ArrayList<>();
+        this.unpaidFines = new ArrayList<>();
+        this.active = true;
+        this.registrationDate = LocalDateTime.now();
+    }
+
     // ENCAPSULATION: Validation methods
     private String validateName(String name) {
         if (name == null || name.trim().isEmpty()) {
@@ -141,3 +153,4 @@ public abstract class Member {
         return String.format("%s[%s]: %s (%s)", getMemberType(), id, name, email);
     }
 }
+

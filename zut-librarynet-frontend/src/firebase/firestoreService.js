@@ -4,10 +4,10 @@
  * Handles real-time sync between backend and UI.
  *
  * COLLECTIONS:
+ * - users: User profiles keyed by Firebase UID
  * - resources: All library resources
  * - loans: Active loans
  * - reservations: Active reservations
- * - members: Member data
  *
  * Flow:
  * 1. API call succeeds
@@ -20,7 +20,6 @@ import {
   doc,
   collection,
   getDoc,
-  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -29,16 +28,16 @@ import {
   where,
   orderBy,
   serverTimestamp,
-  increment
 } from 'firebase/firestore';
-import { getFirebaseServices, isFirebaseConfigured } from './config';
+import { getFirebaseServices } from './config';
 
 // Collection names
 export const COLLECTIONS = {
+  USERS: 'users',
   RESOURCES: 'resources',
   LOANS: 'loans',
   RESERVATIONS: 'reservations',
-  MEMBERS: 'members'
+  BORROW_LOGS: 'borrowLogs'
 };
 
 // ============================================================
@@ -123,15 +122,34 @@ export async function getDocument(collectionName, id) {
 }
 
 // ============================================================
+// USER PROFILE OPERATIONS
+// ============================================================
+
+/**
+ * Create or update a user profile in Firestore (users/{uid})
+ */
+export async function syncUserProfile(uid, data) {
+  return setDocument(COLLECTIONS.USERS, uid, {
+    uid,
+    ...data,
+    createdAt: serverTimestamp()
+  });
+}
+
+/**
+ * Get a user profile by UID
+ */
+export async function getUserProfile(uid) {
+  return getDocument(COLLECTIONS.USERS, uid);
+}
+
+// ============================================================
 // REAL-TIME LISTENERS
 // ============================================================
 
 /**
  * Listen to a collection in real-time
  * Returns unsubscribe function
- *
- * Usage:
- *   const unsubscribe = subscribeToCollection('resources', (data) => setResources(data));
  */
 export function subscribeToCollection(collectionName, callback, filters = {}) {
   const { db } = getFirebaseServices();
@@ -193,9 +211,6 @@ export function subscribeToDocument(collectionName, id, callback) {
 // LIBRARY-SPECIFIC OPERATIONS
 // ============================================================
 
-/**
- * Add a new resource to Firestore
- */
 export async function addResourceToFirestore(resource) {
   return setDocument(COLLECTIONS.RESOURCES, resource.id, {
     title: resource.title,
@@ -207,9 +222,6 @@ export async function addResourceToFirestore(resource) {
   });
 }
 
-/**
- * Update resource availability in Firestore
- */
 export async function updateResourceAvailability(resourceId, isAvailable) {
   return updateDocument(COLLECTIONS.RESOURCES, resourceId, {
     available: isAvailable,
@@ -217,12 +229,9 @@ export async function updateResourceAvailability(resourceId, isAvailable) {
   });
 }
 
-/**
- * Add a loan to Firestore
- */
 export async function addLoanToFirestore(loan) {
   return setDocument(COLLECTIONS.LOANS, loan.loanId || loan.id, {
-    memberId: loan.memberId,
+    userId: loan.userId || loan.memberId,
     resourceId: loan.resourceId,
     resourceTitle: loan.resourceTitle,
     borrowDate: loan.borrowDate,
@@ -232,9 +241,6 @@ export async function addLoanToFirestore(loan) {
   });
 }
 
-/**
- * Update loan status in Firestore
- */
 export async function updateLoanStatus(loanId, status, fineAmount = 0) {
   return updateDocument(COLLECTIONS.LOANS, loanId, {
     status,
@@ -243,12 +249,9 @@ export async function updateLoanStatus(loanId, status, fineAmount = 0) {
   });
 }
 
-/**
- * Add a reservation to Firestore
- */
 export async function addReservationToFirestore(reservation) {
   return setDocument(COLLECTIONS.RESERVATIONS, reservation.reservationId || reservation.id, {
-    memberId: reservation.memberId,
+    userId: reservation.userId || reservation.memberId,
     resourceId: reservation.resourceId,
     resourceTitle: reservation.resourceTitle,
     status: 'PENDING',
@@ -256,9 +259,6 @@ export async function addReservationToFirestore(reservation) {
   });
 }
 
-/**
- * Update reservation status in Firestore
- */
 export async function updateReservationStatus(reservationId, status) {
   return updateDocument(COLLECTIONS.RESERVATIONS, reservationId, {
     status,
@@ -266,54 +266,68 @@ export async function updateReservationStatus(reservationId, status) {
   });
 }
 
+export async function addBorrowLog(log) {
+  const logId = `log_${Date.now()}`;
+  return setDocument(COLLECTIONS.BORROW_LOGS, logId, {
+    userId: log.userId,
+    resourceId: log.resourceId,
+    action: log.action, // BORROW / RETURN / RESERVE
+    timestamp: serverTimestamp()
+  });
+}
+
 // ============================================================
 // SYNC FUNCTIONS (Call after API success)
 // ============================================================
 
-/**
- * Sync after borrowing a resource
- * Call this after successful borrowResource() API call
- */
-export async function syncBorrowAction(memberId, loanData, resourceData) {
+export async function syncBorrowAction(userId, loanData, resourceData) {
   const promises = [];
 
-  // Update loan in Firestore
   if (loanData.loanId || loanData.id) {
-    promises.push(addLoanToFirestore(loanData));
+    promises.push(addLoanToFirestore({ ...loanData, userId }));
   }
 
-  // Update resource availability
   if (resourceData.id) {
     promises.push(updateResourceAvailability(resourceData.id, false));
   }
 
+  promises.push(addBorrowLog({
+    userId,
+    resourceId: resourceData.id || loanData.resourceId,
+    action: 'BORROW'
+  }));
+
   await Promise.all(promises);
 }
 
-/**
- * Sync after returning a resource
- * Call this after successful returnResource() API call
- */
-export async function syncReturnAction(loanId, resourceId, loanData) {
+export async function syncReturnAction(loanId, resourceId, userId, loanData) {
   const promises = [];
 
-  // Update loan status
   promises.push(updateLoanStatus(loanId, 'RETURNED', loanData?.fineAmount || 0));
-
-  // Update resource availability
   promises.push(updateResourceAvailability(resourceId, true));
+  promises.push(addBorrowLog({
+    userId,
+    resourceId,
+    action: 'RETURN'
+  }));
 
   await Promise.all(promises);
 }
 
-/**
- * Sync after creating a reservation
- * Call this after successful createReservation() API call
- */
-export async function syncReservationAction(reservationData) {
+export async function syncReservationAction(userId, reservationData) {
+  const promises = [];
+
   if (reservationData.reservationId || reservationData.id) {
-    await addReservationToFirestore(reservationData);
+    promises.push(addReservationToFirestore({ ...reservationData, userId }));
   }
+
+  promises.push(addBorrowLog({
+    userId,
+    resourceId: reservationData.resourceId,
+    action: 'RESERVE'
+  }));
+
+  await Promise.all(promises);
 }
 
 export default {
@@ -322,6 +336,8 @@ export default {
   updateDocument,
   deleteDocument,
   getDocument,
+  syncUserProfile,
+  getUserProfile,
   subscribeToCollection,
   subscribeToDocument,
   addResourceToFirestore,
@@ -330,7 +346,9 @@ export default {
   updateLoanStatus,
   addReservationToFirestore,
   updateReservationStatus,
+  addBorrowLog,
   syncBorrowAction,
   syncReturnAction,
   syncReservationAction
 };
+

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { MdLock, MdLibraryBooks } from 'react-icons/md';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
 import { toastError, toastSuccess } from '../lib/toast';
 import AuthLayout from '../layouts/AuthLayout';
-import { login } from '../api/api';
+import { auth } from '../firebase/config';
 
-function LoginPage({ onLoginSuccess }) {
-    const navigate = useNavigate();
+function LoginPage() {
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
@@ -37,32 +37,22 @@ function LoginPage({ onLoginSuccess }) {
 
         setLoading(true);
         try {
-            const response = await login(formData.email.trim(), formData.password);
-            const { user, token, memberType, memberName } = response.data;
+            await signInWithEmailAndPassword(
+                auth,
+                formData.email.trim(),
+                formData.password
+            );
 
-            // Store auth data
-            localStorage.setItem('authToken', token);
-            localStorage.setItem('userId', user.id);
-            localStorage.setItem('userName', user.name);
-            localStorage.setItem('userEmail', user.email);
-            localStorage.setItem('userRole', user.role);
-            localStorage.setItem('memberName', memberName || user.name);
-            localStorage.setItem('memberType', memberType || user.memberType || 'MEMBER');
-
-            toastSuccess(`Welcome, ${user.name}!`);
-
-            if (onLoginSuccess) {
-                onLoginSuccess(user);
-            }
-
-            // Role-based redirect
-            if (user.role === 'ADMIN') {
-                navigate('/admin');
-            } else {
-                navigate('/dashboard');
-            }
+            toastSuccess(`Welcome back!`);
         } catch (error) {
-            toastError(error.response?.data?.message || 'Login failed');
+            const message = error.code === 'auth/user-not-found'
+                ? 'No account found with this email'
+                : error.code === 'auth/wrong-password'
+                ? 'Incorrect password'
+                : error.code === 'auth/invalid-credential'
+                ? 'Invalid email or password'
+                : error.message || 'Login failed';
+            toastError(message);
         } finally {
             setLoading(false);
         }
@@ -131,7 +121,7 @@ function LoginPage({ onLoginSuccess }) {
 
                     <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--neutral-200)' }}>
                         <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--neutral-600)' }}>
-                            Don't have an account?{' '}
+                            Don&apos;t have an account?{' '}
                             <Link to="/register" style={{ fontWeight: 600, color: 'var(--primary-600)', textDecoration: 'none' }}>
                                 Register here
                             </Link>
@@ -150,3 +140,4 @@ function LoginPage({ onLoginSuccess }) {
 }
 
 export default LoginPage;
+

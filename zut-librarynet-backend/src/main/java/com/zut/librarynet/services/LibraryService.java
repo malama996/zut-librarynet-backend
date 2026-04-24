@@ -1,10 +1,8 @@
 package com.zut.librarynet.services;
 
 import com.zut.librarynet.exceptions.*;
-import com.zut.librarynet.interfaces.LoanObserver;
 import com.zut.librarynet.interfaces.FineCalculator;
 import com.zut.librarynet.models.*;
-import com.zut.librarynet.models.Loan;
 import com.zut.librarynet.config.FirestoreClient;
 
 import java.time.LocalDate;
@@ -31,9 +29,6 @@ public class LibraryService {
         this.reservationQueue = ReservationQueueObserver.getInstance();
     }
 
-    /**
-     * Sync resources from Firebase when memory is empty
-     */
     private void syncResourcesFromFirebase() {
         if (resources.isEmpty()) {
             try {
@@ -117,6 +112,40 @@ public class LibraryService {
 
         members.put(member.getId(), member);
         memberLoans.put(member.getId(), new ArrayList<>());
+        return member;
+    }
+
+    /**
+     * Register a member with an external UID (Firebase UID).
+     */
+    public Member registerMemberWithUid(String uid, String type, Map<String, Object> data) throws IllegalArgumentException {
+        String name = (String) data.get("name");
+        String email = (String) data.get("email");
+        String phone = (String) data.get("phone");
+        String normalizedType = type.toLowerCase();
+
+        Member member;
+        if (normalizedType.contains("student")) {
+            member = new StudentMember(uid, name, email, phone,
+                    (String) data.get("studentId"),
+                    (String) data.get("programme"),
+                    safeIntValue(data.get("yearOfStudy"), 1));
+        } else if (normalizedType.contains("lecturer")) {
+            member = new LecturerMember(uid, name, email, phone,
+                    (String) data.get("employeeId"),
+                    (String) data.get("department"),
+                    safeIntValue(data.get("yearsOfService"), 0));
+        } else if (normalizedType.contains("researcher")) {
+            member = new ResearcherMember(uid, name, email, phone,
+                    (String) data.get("researcherId"),
+                    (String) data.get("institution"),
+                    (String) data.get("researchArea"));
+        } else {
+            throw new IllegalArgumentException("Invalid member type: " + type);
+        }
+
+        members.put(uid, member);
+        memberLoans.put(uid, new ArrayList<>());
         return member;
     }
 

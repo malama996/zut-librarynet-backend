@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from '../firebase/config';
 
 const API_BASE_URL =
     import.meta.env.VITE_API_URL
@@ -11,22 +12,28 @@ const api = axios.create({
 });
 
 // ============================================================
-// REQUEST INTERCEPTOR
+// REQUEST INTERCEPTOR - Attach Firebase ID Token
 // ============================================================
 api.interceptors.request.use(
-    (config) => {
+    async (config) => {
         // Public endpoints - skip auth
         const publicEndpoints = [
-            '/auth/login',
-            '/auth/register/member',
-            '/auth/register/admin'
+            '/auth/verify',
+            '/auth/register-profile',
         ];
         const isPublic = publicEndpoints.some(ep => config.url?.includes(ep));
         if (isPublic) return config;
 
-        // Add token
-        const token = localStorage.getItem('authToken');
-        if (token) config.headers.Authorization = token;
+        // Attach Firebase ID token
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            try {
+                const idToken = await currentUser.getIdToken();
+                config.headers.Authorization = `Bearer ${idToken}`;
+            } catch (err) {
+                console.error('[API] Failed to get ID token:', err);
+            }
+        }
         return config;
     },
     (error) => Promise.reject(error)
@@ -39,12 +46,9 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userId');
-            localStorage.removeItem('userRole');
-            localStorage.removeItem('userName');
+            // Token invalid or expired — AuthContext will handle state
+            console.warn('[API] 401 Unauthorized');
         }
-        console.error('API Error:', error.response?.data?.message || error.message);
         return Promise.reject(error);
     }
 );
@@ -54,33 +58,20 @@ api.interceptors.response.use(
 // ============================================================
 
 /**
- * Login - Single endpoint for all users
- * @returns {Promise<{user: {id, name, email, role}, token: string}>}
+ * Verify Firebase token and get user profile from backend
  */
-export const login = (email, password) =>
-    api.post('/auth/login', { email, password });
+export const verifyToken = () => api.post('/auth/verify');
 
 /**
- * Register as member (Student, Lecturer, Researcher).
- * Full payload: name, email, password, type, idSecret, phone, and type-specific fields.
- *
- * @param {Object} data — { name, email, password, type, idSecret, phone, ...typeFields }
- *   type:       'STUDENT' | 'LECTURER' | 'RESEARCHER'
- *   idSecret:   studentId | employeeId | researcherId
+ * Register member profile in backend after Firebase Auth signup
  */
-export const registerMember = (data) =>
-    api.post('/auth/register/member', data);
+export const registerMemberProfile = (data) =>
+    api.post('/auth/register-profile', data);
 
 /**
- * Register as admin (requires secret)
+ * Logout (frontend handles Firebase signOut)
  */
-export const registerAdmin = (name, email, password, adminSecret) =>
-    api.post('/auth/register/admin', { name, email, password, adminSecret });
-
-/**
- * Logout
- */
-export const logout = () => api.post('/auth/logout');
+export const logout = () => Promise.resolve({ data: { success: true } });
 
 // ============================================================
 // RESOURCE APIs
@@ -139,24 +130,14 @@ export const getOverdueReport = () => api.get('/reports/overdue');
 // ============================================================
 // ADMIN APIs (all require ADMIN role)
 // ============================================================
-
-// Resources
 export const adminGetAllResources = () => api.get('/admin/resources');
 export const adminCreateResource = (data) => api.post('/admin/resources', data);
 export const adminUpdateResource = (id, data) => api.put(`/admin/resources/${id}`, data);
 export const adminDeleteResource = (id) => api.delete(`/admin/resources/${id}`);
-
-// Users
 export const adminGetAllUsers = () => api.get('/admin/users');
 export const adminUpdateUser = (id, data) => api.put(`/admin/users/${id}`, data);
-
-// Loans
 export const adminGetAllLoans = () => api.get('/admin/loans');
-
-// Reservations
 export const adminGetAllReservations = () => api.get('/admin/reservations');
-
-// Statistics
 export const adminGetStats = () => api.get('/admin/stats');
 
 // ============================================================
@@ -175,7 +156,6 @@ async function getFirestore() {
     return firestore;
 }
 
-// Sync after borrow
 export async function syncBorrow(loanData, resourceData) {
     const fs = await getFirestore();
     if (!fs) return;
@@ -183,12 +163,12 @@ export async function syncBorrow(loanData, resourceData) {
         await fs.syncBorrowAction(
             loanData.memberId,
             {
-                loanId:       loanData.loanId || loanData.id,
-                resourceId:   loanData.resourceId || resourceData?.id,
+                loanId: loanData.loanId || loanData.id,
+                resourceId: loanData.resourceId || resourceData?.id,
                 resourceTitle: loanData.resourceTitle,
-                memberId:     loanData.memberId,
-                borrowDate:   loanData.borrowDate,
-                dueDate:      loanData.dueDate,
+                memberId: loanData.memberId,
+                borrowDate: loanData.borrowDate,
+                dueDate: loanData.dueDate,
             },
             { id: loanData.resourceId || resourceData?.id }
         );
@@ -197,7 +177,6 @@ export async function syncBorrow(loanData, resourceData) {
     }
 }
 
-// Sync after return
 export async function syncReturn(loanId, resourceId, returnData) {
     const fs = await getFirestore();
     if (!fs) return;
@@ -208,17 +187,16 @@ export async function syncReturn(loanId, resourceId, returnData) {
     }
 }
 
-// Sync member after registration
 export async function syncMember(memberData) {
     const fs = await getFirestore();
     if (!fs) return;
     try {
         await fs.setDocument(fs.COLLECTIONS.MEMBERS, memberData.id, {
-            id:         memberData.id,
-            name:       memberData.name,
-            email:      memberData.email,
+            id: memberData.id,
+            name: memberData.name,
+            email: memberData.email,
             memberType: memberData.memberType || memberData.memberType,
-            createdAt:  new Date().toISOString(),
+            createdAt: new Date().toISOString(),
         });
         console.log('[API] Member synced to Firestore:', memberData.email);
     } catch (e) {
@@ -226,7 +204,6 @@ export async function syncMember(memberData) {
     }
 }
 
-// Sync reservation after creation
 export async function syncReservation(reservationData) {
     const fs = await getFirestore();
     if (!fs) return;
@@ -239,3 +216,4 @@ export async function syncReservation(reservationData) {
 }
 
 export default api;
+

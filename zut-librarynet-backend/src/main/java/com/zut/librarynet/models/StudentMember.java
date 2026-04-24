@@ -14,15 +14,20 @@ public class StudentMember extends Member {
         this.yearOfStudy = validateYearOfStudy(yearOfStudy);
     }
 
+    /** Constructor with external UID (Firebase UID) */
+    public StudentMember(String uid, String name, String email, String phone,
+                         String studentId, String programme, int yearOfStudy) {
+        super(uid, name, email, phone);
+        this.studentId = validateStudentId(studentId);
+        this.programme = programme;
+        this.yearOfStudy = validateYearOfStudy(yearOfStudy);
+    }
+
     private String validateStudentId(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             throw new IllegalArgumentException("Student ID cannot be empty");
         }
-        // ZUT student ID format: 2024XXX format
-        if (!studentId.matches("\\d{7}")) {
-            throw new IllegalArgumentException("Student ID must be 7 digits");
-        }
-        return studentId;
+        return studentId.trim();
     }
 
     private int validateYearOfStudy(int yearOfStudy) {
@@ -77,3 +82,4 @@ public class StudentMember extends Member {
         return fields;
     }
 }
+

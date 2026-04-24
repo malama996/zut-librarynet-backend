@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { MdPerson, MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
 import { toastError, toastSuccess } from '../lib/toast';
 import AuthLayout from '../layouts/AuthLayout';
-import { registerAdmin } from '../api/api';
+import { auth, db } from '../firebase/config';
+import { registerMemberProfile } from '../api/api';
 
-function AdminRegisterPage({ onSuccess }) {
+const ADMIN_SECRET = 'ZUT-ADMIN-2026';
+
+function AdminRegisterPage() {
     const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        adminSecret: ''
+        name: '', email: '', password: '', confirmPassword: '', adminSecret: ''
     });
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
@@ -37,7 +38,9 @@ function AdminRegisterPage({ onSuccess }) {
         if (formData.password !== formData.confirmPassword) {
             newErrors.confirmPassword = 'Passwords do not match';
         }
-        if (!formData.adminSecret) newErrors.adminSecret = 'Admin secret is required';
+        if (formData.adminSecret !== ADMIN_SECRET) {
+            newErrors.adminSecret = 'Invalid admin secret';
+        }
         return newErrors;
     };
 
@@ -51,25 +54,63 @@ function AdminRegisterPage({ onSuccess }) {
 
         setLoading(true);
         try {
-            const response = await registerAdmin(
-                formData.name.trim(),
+            // Step 1: Firebase Auth signup
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
                 formData.email.trim(),
-                formData.password,
-                formData.adminSecret.trim()
+                formData.password
             );
-            const { user } = response.data;
+            const firebaseUser = userCredential.user;
 
-            // Store only userId for display - NO auth token (user must log in)
-            localStorage.setItem('userId', user.id);
-            localStorage.setItem('userName', user.name);
-            localStorage.setItem('userEmail', user.email);
-            localStorage.setItem('userRole', user.role);
+            // Step 2: Update display name
+            await updateProfile(firebaseUser, { displayName: formData.name.trim() });
 
-            setNewAdmin(user);
+            // Step 3: Create Firestore user profile with admin role
+            const uid = firebaseUser.uid;
+            await setDoc(doc(db, 'users', uid), {
+                uid: uid,
+                name: formData.name.trim(),
+                email: formData.email.trim().toLowerCase(),
+                role: 'admin',
+                status: 'active',
+                createdAt: new Date().toISOString(),
+            });
+
+            // Step 4: Get Firebase ID token for backend verification
+            const idToken = await firebaseUser.getIdToken();
+
+            // Step 5: Create admin profile in backend
+            try {
+                await registerMemberProfile({
+                    idToken: idToken,
+                    uid: uid,
+                    name: formData.name.trim(),
+                    email: formData.email.trim().toLowerCase(),
+                    phone: 'Not provided',
+                    type: 'ADMIN',
+                    role: 'admin',
+                });
+            } catch (apiErr) {
+                console.warn('[AdminRegister] Backend profile creation failed:', apiErr);
+            }
+
+            setNewAdmin({
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                role: 'admin',
+                uid: uid,
+            });
             setSuccess(true);
             toastSuccess('Admin registered successfully!');
         } catch (error) {
-            toastError(error.response?.data?.message || 'Admin registration failed');
+            const message = error.code === 'auth/email-already-in-use'
+                ? 'Email already registered'
+                : error.code === 'auth/invalid-email'
+                ? 'Invalid email address'
+                : error.code === 'auth/weak-password'
+                ? 'Password is too weak'
+                : error.message || 'Admin registration failed';
+            toastError(message);
         } finally {
             setLoading(false);
         }
@@ -198,7 +239,7 @@ function AdminRegisterPage({ onSuccess }) {
                             />
                             {errors.adminSecret && <FormError message={errors.adminSecret} />}
                             <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-                                Demo secret: ZUT-ADMIN-2026
+                                Demo secret: {ADMIN_SECRET}
                             </p>
                         </FormGroup>
 
@@ -220,3 +261,4 @@ function AdminRegisterPage({ onSuccess }) {
 }
 
 export default AdminRegisterPage;
+

@@ -3,9 +3,10 @@ import { MdCheckCircle, MdWarning } from 'react-icons/md';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { BarChart3, TrendingUp, PieChart, Activity } from 'lucide-react';
 import { getMemberLoans, getMemberFines } from '../api/api';
+import { useAuth } from '../hooks/useAuth';
 
 function StatisticsPage() {
-  const memberId = localStorage.getItem('userId');
+  const { uid } = useAuth();
   const [stats, setStats] = useState({
     totalBorrowed: 0,
     totalReturned: 0,
@@ -14,42 +15,38 @@ function StatisticsPage() {
     totalFines: 0,
     memberSince: new Date().toLocaleDateString(),
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]);
 
   useEffect(() => {
-    if (memberId) loadStatistics();
-  }, [memberId]);
+    if (!uid) return;
+    const loadStatistics = async () => {
+      try {
+        const [loansRes, finesRes] = await Promise.all([
+          getMemberLoans(uid),
+          getMemberFines(uid),
+        ]);
 
-  const loadStatistics = async () => {
-    try {
-      setIsLoading(true);
-      const [loansRes, finesRes] = await Promise.all([
-        getMemberLoans(memberId),
-        getMemberFines(memberId),
-      ]);
+        const loans = loansRes.data?.activeLoans || [];
+        const now = new Date();
 
-      const loans = loansRes.data?.activeLoans || [];
-      const now = new Date();
+        const overdue = loans.filter(l => new Date(l.dueDate) < now).length;
 
-      const overdue = loans.filter(l => new Date(l.dueDate) < now).length;
+        setStats({
+          totalBorrowed: loansRes.data?.totalBorrowed || loans.length,
+          totalReturned: loansRes.data?.totalReturned || 0,
+          activeLoan: loans.length,
+          overdueLoans: overdue,
+          totalFines: finesRes.data?.totalUnpaidFines || 0,
+          memberSince: loansRes.data?.memberSince || new Date().toLocaleDateString(),
+        });
 
-      setStats({
-        totalBorrowed: loansRes.data?.totalBorrowed || loans.length,
-        totalReturned: loansRes.data?.totalReturned || 0,
-        activeLoan: loans.length,
-        overdueLoans: overdue,
-        totalFines: finesRes.data?.totalUnpaidFines || 0,
-        memberSince: loansRes.data?.memberSince || new Date().toLocaleDateString(),
-      });
-
-      setRecentActivity(loans.slice(0, 5));
-    } catch (error) {
-      console.error('Failed to load statistics:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        setRecentActivity(loans.slice(0, 5));
+      } catch (error) {
+        console.error('Failed to load statistics:', error);
+      }
+    };
+    loadStatistics();
+  }, [uid]);
 
   const statistics = stats;
 
@@ -192,3 +189,4 @@ function StatisticCard({ icon, label, value, unit }) {
 }
 
 export default StatisticsPage;
+

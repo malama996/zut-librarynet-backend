@@ -2,12 +2,12 @@
  * Firebase Configuration
  *
  * Reads credentials from .env (VITE_* prefixed variables).
- * Initialize Firebase once at app startup.
+ * Initialize Firebase once at app startup with session persistence.
  */
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 // ============================================================
 // READ REAL VALUES FROM .env (set by Vite)
@@ -35,7 +35,7 @@ let auth = null;
  * Initialize Firebase services.
  * Safe to call multiple times — returns cached instance.
  */
-export function initializeFirebase() {
+export async function initializeFirebase() {
   if (!IS_CONFIGURED) {
     console.warn(
       '[Firebase] Not configured — set VITE_FIREBASE_* in .env\n' +
@@ -48,6 +48,15 @@ export function initializeFirebase() {
     app  = initializeApp(firebaseConfig);
     db   = getFirestore(app);
     auth = getAuth(app);
+
+    // CRITICAL: Enable persistent login across browser restart
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      console.log('[Firebase] Persistence set to LOCAL');
+    } catch (err) {
+      console.error('[Firebase] Failed to set persistence:', err);
+    }
+
     console.log('[Firebase] Initialized successfully');
   }
 
@@ -67,7 +76,9 @@ export function isFirebaseConfigured() {
   return IS_CONFIGURED;
 }
 
-// Auto-initialize on module load
-export const firebase = initializeFirebase();
+// Auto-initialize on module load (fire-and-forget)
+initializeFirebase().catch(() => {});
 
-export default firebase;
+export { auth, db };
+export default { app, db, auth, configured: IS_CONFIGURED };
+

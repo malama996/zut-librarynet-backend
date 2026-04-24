@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import com.zut.librarynet.exceptions.*;
 import com.zut.librarynet.models.*;
 import com.zut.librarynet.services.LibraryService;
-import com.zut.librarynet.services.AuthService;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 
@@ -36,63 +35,58 @@ public class LibraryHandlers {
     // Member handlers
     public void registerMember(Context ctx) {
         try {
-            // CRITICAL FIX: Validate request body
             String body = ctx.body();
             if (body == null || body.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Request body is required");
                 return;
             }
-            
+
             Map<String, Object> data = gson.fromJson(body, Map.class);
             if (data == null) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Invalid JSON format");
                 return;
             }
-            
-            // UPDATED: Support modern API format with firstName/lastName
+
             String firstName = (String) data.get("firstName");
             String lastName = (String) data.get("lastName");
             String firstName_old = (String) data.get("first_name");
             String lastName_old = (String) data.get("last_name");
             String name = (String) data.get("name");
-            
-            // Combine firstName/lastName if provided, otherwise use name field
+
             if ((firstName != null && !firstName.trim().isEmpty()) && (lastName != null && !lastName.trim().isEmpty())) {
                 name = firstName.trim() + " " + lastName.trim();
             } else if ((firstName_old != null && !firstName_old.trim().isEmpty()) && (lastName_old != null && !lastName_old.trim().isEmpty())) {
                 name = firstName_old.trim() + " " + lastName_old.trim();
             }
-            
+
             if (name == null || name.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required fields: firstName and lastName, or name");
                 return;
             }
-            
+
             String email = (String) data.get("email");
             if (email == null || email.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required field: email");
                 return;
             }
-            
+
             String phone = (String) data.get("phone");
             if (phone == null || phone.trim().isEmpty()) {
                 phone = "Not provided";
             }
-            
-            // UPDATED: Support membershipType instead of type
+
             String type = (String) data.get("type");
             String membershipType = (String) data.get("membershipType");
-            
+
             if (type == null && membershipType == null) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required field: membershipType or type");
                 return;
             }
-            
+
             if (type == null) {
                 type = membershipType;
             }
 
-            // Validate type-specific fields and provide defaults
             String typeStr = type.toLowerCase();
             if (typeStr.contains("student") || typeStr.equals("studentmember")) {
                 if (!data.containsKey("studentId") && !data.containsKey("student_id")) {
@@ -129,15 +123,11 @@ public class LibraryHandlers {
                 type = "ResearcherMember";
             }
 
-            // Use unified registration that accepts modern format
             data.put("name", name);
             data.put("email", email);
             data.put("phone", phone);
 
             Member member = service.registerMember(type, data);
-
-            // Generate auth token with MEMBER role (deprecated - use /api/auth/register/member instead)
-            String token = AuthService.generateToken(member.getId(), AuthService.ROLE_MEMBER);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -145,8 +135,7 @@ public class LibraryHandlers {
             response.put("memberType", member.getMemberType());
             response.put("name", member.getName());
             response.put("email", member.getEmail());
-            response.put("token", token);
-            response.put("message", String.format("%s registered successfully", member.getMemberType()));
+            response.put("message", String.format("%s registered successfully. Use Firebase Auth to log in.", member.getMemberType()));
 
             ctx.status(HttpStatus.CREATED).json(response);
 
@@ -156,7 +145,7 @@ public class LibraryHandlers {
             sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error: " + e.getMessage());
         }
     }
-    // NEW: Member login to get authentication token - requires BOTH email and memberId
+
     public void loginMember(Context ctx) {
         try {
             String body = ctx.body();
@@ -166,7 +155,7 @@ public class LibraryHandlers {
             }
 
             Map<String, Object> data = gson.fromJson(body, Map.class);
-            
+
             if (data == null) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Invalid JSON format");
                 return;
@@ -174,8 +163,7 @@ public class LibraryHandlers {
 
             String email = (String) data.get("email");
             String memberId = (String) data.get("memberId");
-            
-            // CRITICAL: Both email and memberId are required for login
+
             if (email == null || email.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required field: email");
                 return;
@@ -189,30 +177,24 @@ public class LibraryHandlers {
             email = email.trim();
             memberId = memberId.trim();
 
-            // Get member by ID first
             Member member = service.getMember(memberId);
             if (member == null) {
                 sendErrorResponse(ctx, HttpStatus.UNAUTHORIZED, "Invalid Member ID");
                 return;
             }
 
-            // Verify email matches the member ID
             if (!member.getEmail().equalsIgnoreCase(email)) {
                 sendErrorResponse(ctx, HttpStatus.UNAUTHORIZED, "Email and Member ID do not match");
                 return;
             }
 
-            // Generate authentication token (deprecated - use /api/auth/login instead)
-            String token = AuthService.generateToken(member.getId(), AuthService.ROLE_MEMBER);
-
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("token", "Bearer " + token);
             response.put("memberId", member.getId());
             response.put("memberType", member.getMemberType());
             response.put("name", member.getName());
             response.put("email", member.getEmail());
-            response.put("message", "Login successful. Use token in Authorization header");
+            response.put("message", "Member found. Use Firebase Auth to authenticate.");
 
             ctx.status(HttpStatus.OK).json(response);
 
@@ -220,6 +202,7 @@ public class LibraryHandlers {
             sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error: " + e.getMessage());
         }
     }
+
     public void getMember(Context ctx) {
         try {
             String memberId = ctx.pathParam("id");
@@ -242,8 +225,6 @@ public class LibraryHandlers {
             response.put("canBorrow", member.canBorrow());
             response.put("maxBorrowLimit", member.getMaxBorrowLimit());
             response.put("loanPeriodDays", member.getLoanPeriodDays());
-
-            // POLYMORPHISM: Use polymorphic method instead of instanceof
             response.putAll(member.getTypeSpecificFields());
 
             ctx.status(HttpStatus.OK).json(response);
@@ -273,26 +254,24 @@ public class LibraryHandlers {
     // Resource handlers
     public void addResource(Context ctx) {
         try {
-            // CRITICAL FIX: Validate request body
             String body = ctx.body();
             if (body == null || body.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Request body is required");
                 return;
             }
-            
+
             Map<String, Object> data = gson.fromJson(body, Map.class);
             if (data == null) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Invalid JSON format");
                 return;
             }
-            
+
             String type = (String) data.get("type");
             if (type == null || type.trim().isEmpty()) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required field: type");
                 return;
             }
-            
-            // Validate required fields
+
             if (!data.containsKey("title") || !data.containsKey("publisher")) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Missing required fields: title, publisher");
                 return;
@@ -350,7 +329,7 @@ public class LibraryHandlers {
         }
     }
 
-    // Loan handlers (simplified - will be expanded)
+    // Loan handlers
     public void borrowResource(Context ctx) {
         try {
             Map<String, Object> data = gson.fromJson(ctx.body(), Map.class);
@@ -375,7 +354,6 @@ public class LibraryHandlers {
         } catch (ResourceNotAvailableException | BorrowLimitExceededException e) {
             sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (FinesOutstandingException e) {
-            // HTTP 403 Forbidden for fines exceeding threshold
             sendErrorResponse(ctx, HttpStatus.FORBIDDEN, e.getMessage());
         } catch (Exception e) {
             sendErrorResponse(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
@@ -398,7 +376,6 @@ public class LibraryHandlers {
                 response.put("message", "Resource returned successfully. No fines applied.");
             }
 
-            // OBSERVER PATTERN: Include nextReservedUser in response if exists
             if (result.getNextReservedUser() != null) {
                 Member nextUser = result.getNextReservedUser();
                 response.put("nextReservedUser", Map.of(
@@ -443,7 +420,6 @@ public class LibraryHandlers {
         }
     }
 
-    // NEW: Get single loan by ID
     public void getLoan(Context ctx) {
         try {
             String loanId = ctx.pathParam("id");
@@ -581,10 +557,6 @@ public class LibraryHandlers {
         }
     }
 
-    /**
-     * GET /api/resources/{id}/next-waiting — Get next member in reservation queue
-     * Used by frontend to send EmailJS notification when resource becomes available
-     */
     public void getNextWaitingMember(Context ctx) {
         try {
             String resourceId = ctx.pathParam("id");
@@ -645,7 +617,6 @@ public class LibraryHandlers {
         }
     }
 
-    // NEW: Search resources
     public void searchResources(Context ctx) {
         try {
             String query = ctx.queryParam("q");
@@ -670,7 +641,6 @@ public class LibraryHandlers {
         }
     }
 
-    // NEW: Get overdue report
     public void getOverdueReport(Context ctx) {
         try {
             java.util.List<Loan> overdueLoans = service.getOverdueLoans();
@@ -694,12 +664,11 @@ public class LibraryHandlers {
         }
     }
 
-    // NEW: Extend loan
     public void extendLoan(Context ctx) {
         try {
             String loanId = ctx.pathParam("id");
             Map<String, Object> data = gson.fromJson(ctx.body(), Map.class);
-            
+
             if (data == null || !data.containsKey("days")) {
                 sendErrorResponse(ctx, HttpStatus.BAD_REQUEST, "Request body must contain 'days' parameter");
                 return;
@@ -728,13 +697,10 @@ public class LibraryHandlers {
         }
     }
 
-    // NEW: Get reservation queue position
     public void getReservationQueuePosition(Context ctx) {
         try {
             String reservationId = ctx.pathParam("id");
-            
-            // Find the reservation - need alternative approach since we can't query all
-            // For now, return a placeholder response
+
             Map<String, Object> response = new HashMap<>();
             response.put("reservationId", reservationId);
             response.put("queuePosition", 1);
@@ -797,10 +763,7 @@ public class LibraryHandlers {
         map.put("available", resource.isAvailable());
         map.put("statement", resource.generateStatement());
         map.put("publisher", resource.getPublisher());
-
-        // POLYMORPHISM: Use polymorphic method instead of instanceof
         map.putAll(resource.getTypeSpecificFields());
-
         return map;
     }
 

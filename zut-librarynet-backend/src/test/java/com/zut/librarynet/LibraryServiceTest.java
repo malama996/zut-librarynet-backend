@@ -81,7 +81,6 @@ public class LibraryServiceTest {
     @Test
     @Order(1)
     void testEncapsulation_InvalidDataThrowsException() {
-        // Test invalid student registration
         Map<String, Object> invalidStudent = new HashMap<>();
         invalidStudent.put("name", "");
         invalidStudent.put("email", "invalid");
@@ -94,7 +93,6 @@ public class LibraryServiceTest {
             service.registerMember("student", invalidStudent);
         });
 
-        // Test invalid book addition
         Map<String, Object> invalidBook = new HashMap<>();
         invalidBook.put("title", "");
         invalidBook.put("publisher", "Test");
@@ -115,7 +113,6 @@ public class LibraryServiceTest {
         Member lecturer = service.getMember(lecturerId);
         Member researcher = service.getMember(researcherId);
 
-        // Same method calls, different results based on member type
         assertTrue(student instanceof StudentMember);
         assertTrue(lecturer instanceof LecturerMember);
         assertTrue(researcher instanceof ResearcherMember);
@@ -137,10 +134,9 @@ public class LibraryServiceTest {
         Member lecturer = service.getMember(lecturerId);
         Member researcher = service.getMember(researcherId);
 
-        // 10 days overdue
-        assertEquals(20.0, student.calculateFine(10));  // 10 * 2 = 20
-        assertEquals(50.0, lecturer.calculateFine(10)); // 10 * 5 = 50
-        assertEquals(0.0, researcher.calculateFine(10)); // 0 for researchers
+        assertEquals(20.0, student.calculateFine(10));
+        assertEquals(50.0, lecturer.calculateFine(10));
+        assertEquals(0.0, researcher.calculateFine(10));
     }
 
     // TEST 4: ENCAPSULATION - Cannot directly modify private fields
@@ -148,10 +144,7 @@ public class LibraryServiceTest {
     @Order(4)
     void testEncapsulation_NoDirectFieldAccess() {
         Member student = service.getMember(studentId);
-
-        // Attempt to access private fields would fail compilation
-        // This test verifies that fields are properly encapsulated
-        assertNotNull(student.getId()); // ID is final and auto-generated
+        assertNotNull(student.getId());
         assertNotNull(student.getName());
         assertNotNull(student.getEmail());
         assertNotNull(student.getPhone());
@@ -165,7 +158,6 @@ public class LibraryServiceTest {
         LibraryResource journal = service.getResource(journalId);
         LibraryResource digital = service.getResource(digitalId);
 
-        // Same method call produces different results
         String bookStatement = book.generateStatement();
         String journalStatement = journal.generateStatement();
         String digitalStatement = digital.generateStatement();
@@ -188,7 +180,6 @@ public class LibraryServiceTest {
     @Test
     @Order(7)
     void testBusinessRule_StudentBorrowLimit() throws LibraryException {
-        // Add 4 books for testing
         List<String> bookIds = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
             Map<String, Object> bookData = new HashMap<>();
@@ -201,12 +192,10 @@ public class LibraryServiceTest {
             bookIds.add(id);
         }
 
-        // Borrow 3 books (should work)
         for (int i = 0; i < 3; i++) {
             service.borrowResource(studentId, bookIds.get(i));
         }
 
-        // Attempt 4th borrow (should fail)
         assertThrows(BorrowLimitExceededException.class, () -> {
             service.borrowResource(studentId, bookIds.get(3));
         });
@@ -218,16 +207,13 @@ public class LibraryServiceTest {
     void testBusinessRule_FinesPreventBorrowing() throws LibraryException {
         Member student = service.getMember(studentId);
 
-        // Add a fine > 50
         Loan mockLoan = new Loan(student, service.getResource(bookId));
         Fine fine = new Fine(mockLoan, 75.0);
         student.addFine(fine);
 
-        // Student should not be able to borrow
         assertFalse(student.canBorrow());
         assertEquals(75.0, student.getTotalUnpaidFines());
 
-        // Attempt to borrow (should fail)
         assertThrows(FinesOutstandingException.class, () -> {
             service.borrowResource(studentId, journalId);
         });
@@ -237,10 +223,8 @@ public class LibraryServiceTest {
     @Test
     @Order(9)
     void testBusinessRule_CannotBorrowSameResourceTwice() throws LibraryException {
-        // Borrow a book
         service.borrowResource(studentId, bookId);
 
-        // Attempt to borrow same book again (should fail)
         assertThrows(ResourceNotAvailableException.class, () -> {
             service.borrowResource(studentId, bookId);
         });
@@ -250,7 +234,6 @@ public class LibraryServiceTest {
     @Test
     @Order(10)
     void testPolymorphism_LoanPeriods() throws LibraryException {
-        // Add a book for testing
         Map<String, Object> bookData = new HashMap<>();
         bookData.put("title", "Advanced Java");
         bookData.put("publisher", "Pearson");
@@ -263,7 +246,6 @@ public class LibraryServiceTest {
         assertEquals(14, java.time.temporal.ChronoUnit.DAYS.between(
                 studentLoan.getBorrowDate(), studentLoan.getDueDate()));
 
-        // Return and borrow for lecturer
         service.returnResource(studentLoan.getId());
         Loan lecturerLoan = service.borrowResource(lecturerId, testBookId);
         assertEquals(30, java.time.temporal.ChronoUnit.DAYS.between(
@@ -275,12 +257,7 @@ public class LibraryServiceTest {
     @Order(11)
     void testEncapsulation_LoanImmutability() throws LibraryException {
         Loan loan = service.borrowResource(studentId, bookId);
-
-        // Loan ID should be final
         assertNotNull(loan.getId());
-
-        // Try to change borrow date (should not be possible - no setter)
-        // This is compile-time verification that fields are properly encapsulated
     }
 
     // TEST 12: Get member loans
@@ -298,25 +275,16 @@ public class LibraryServiceTest {
     @Test
     @Order(13)
     void testReturnResource_WithFineCalculation() throws LibraryException {
-        // Borrow a book
         Loan loan = service.borrowResource(studentId, bookId);
-
-        // Simulate overdue (for testing, we can't actually change time)
-        // In a real test, we'd use mocking to override time
-        Fine fine = service.returnResource(loan.getId());
-
-        // No fine if returned on time
-        assertNull(fine);
+        LibraryService.ReturnResult result = service.returnResource(loan.getId());
+        assertNull(result.getFine());
     }
 
     // TEST 14: Create reservation
     @Test
     @Order(14)
     void testCreateReservation() throws LibraryException {
-        // First borrow the book
         service.borrowResource(studentId, bookId);
-
-        // Create reservation for lecturer
         Reservation reservation = service.createReservation(lecturerId, bookId);
 
         assertNotNull(reservation);
@@ -328,13 +296,12 @@ public class LibraryServiceTest {
     @Order(15)
     void testGetAvailableResources() throws LibraryException {
         List<LibraryResource> available = service.getAvailableResources();
-        assertEquals(3, available.size()); // Initially all available
+        assertEquals(3, available.size());
 
-        // Borrow a book
         service.borrowResource(studentId, bookId);
 
         available = service.getAvailableResources();
-        assertEquals(2, available.size()); // One less available
+        assertEquals(2, available.size());
     }
 
     // TEST 16: Researcher loses privileges after 14 days overdue
@@ -342,16 +309,11 @@ public class LibraryServiceTest {
     @Order(16)
     void testResearcherSpecialRule() throws LibraryException {
         ResearcherMember researcher = (ResearcherMember) service.getMember(researcherId);
-
-        // Initially can borrow
         assertTrue(researcher.canBorrow());
 
-        // Add a test loan (this is simplified; actual overdue would require time simulation)
         Loan loan = new Loan(researcher, service.getResource(bookId));
         researcher.addActiveLoan(loan);
 
-        // In real scenario, we'd simulate 15 days passing
-        // This test verifies the method structure
         assertNotNull(researcher.hasOverduePrivileges());
     }
 
@@ -416,17 +378,12 @@ public class LibraryServiceTest {
     @Test
     @Order(21)
     void testReservationQueueNotification() throws LibraryException {
-        // Borrow book so it's unavailable
         service.borrowResource(studentId, bookId);
-
-        // Create reservation for lecturer
         Reservation reservation = service.createReservation(lecturerId, bookId);
 
-        // Return book - should trigger notification
         Loan loan = service.getMemberLoans(studentId).get(0);
         service.returnResource(loan.getId());
 
-        // Reservation should be notified
         assertEquals("NOTIFIED", reservation.getStatus());
     }
 
@@ -434,7 +391,6 @@ public class LibraryServiceTest {
     @Test
     @Order(22)
     void testCannotReserveAvailableResource() throws LibraryException {
-        // Resource is available (not borrowed)
         assertThrows(ResourceAvailableException.class, () -> {
             service.createReservation(lecturerId, bookId);
         });
@@ -444,13 +400,9 @@ public class LibraryServiceTest {
     @Test
     @Order(23)
     void testCannotDuplicateReservation() throws LibraryException {
-        // Borrow book
         service.borrowResource(studentId, bookId);
-
-        // Create first reservation
         service.createReservation(lecturerId, bookId);
 
-        // Create duplicate reservation
         assertThrows(LibraryException.class, () -> {
             service.createReservation(lecturerId, bookId);
         });
@@ -460,15 +412,10 @@ public class LibraryServiceTest {
     @Test
     @Order(24)
     void testCancelReservation() throws LibraryException {
-        // Borrow book
         service.borrowResource(studentId, bookId);
-
-        // Create reservation
         Reservation reservation = service.createReservation(lecturerId, bookId);
 
-        // Cancel reservation
         service.cancelReservation(reservation.getId());
-
         assertEquals("CANCELLED", reservation.getStatus());
     }
 
@@ -478,14 +425,12 @@ public class LibraryServiceTest {
     void testPayFine() throws LibraryException {
         Member student = service.getMember(studentId);
 
-        // Add a fine
         Loan mockLoan = new Loan(student, service.getResource(bookId));
         Fine fine = new Fine(mockLoan, 30.0);
         student.addFine(fine);
 
         assertEquals(30.0, student.getTotalUnpaidFines());
 
-        // Pay fine
         service.payFine(studentId, fine.getId());
 
         assertEquals(0.0, student.getTotalUnpaidFines());
@@ -498,8 +443,8 @@ public class LibraryServiceTest {
     void testGetStatistics() {
         Map<String, Long> stats = service.getStatistics();
 
-        assertEquals(3, stats.get("totalMembers")); // student, lecturer, researcher
-        assertEquals(3, stats.get("totalResources")); // book, journal, digital
+        assertEquals(3, stats.get("totalMembers"));
+        assertEquals(3, stats.get("totalResources"));
         assertEquals(0, stats.get("activeLoans"));
         assertEquals(3, stats.get("availableResources"));
     }

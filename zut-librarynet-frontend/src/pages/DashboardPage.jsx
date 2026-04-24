@@ -4,10 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { BookOpen, AlertCircle, Clock, CheckCircle } from 'lucide-react';
-import { getMemberLoans, getMemberFines, getStatistics } from '../api/api';
+import { getMemberLoans, getMemberFines } from '../api/api';
+import { useAuth } from '../contexts/AuthContext';
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const { uid, name, role } = useAuth();
+
   const [stats, setStats] = useState({
     currentlyBorrowed: 0,
     dueSoon: 0,
@@ -17,27 +20,23 @@ function DashboardPage() {
   const [activeLoans, setActiveLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const memberName = localStorage.getItem('memberName');
-  const memberType = localStorage.getItem('memberType');
-  const memberId = localStorage.getItem('memberId');
-
   // Fetch dashboard data
   useEffect(() => {
-    if (memberId) {
+    if (uid) {
       fetchDashboardData();
     }
-  }, [memberId]);
+  }, [uid]);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
       // Fetch active loans
-      const loansResponse = await getMemberLoans(memberId);
+      const loansResponse = await getMemberLoans(uid);
       const loans = loansResponse.data?.activeLoans || [];
       setActiveLoans(loans);
 
       // Fetch fines
-      const finesResponse = await getMemberFines(memberId);
+      const finesResponse = await getMemberFines(uid);
       const totalFines = finesResponse.data?.totalUnpaidFines || 0;
 
       // Calculate stats
@@ -97,11 +96,11 @@ function DashboardPage() {
     <div className="space-y-8">
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-blue-600 to-amber-500 rounded-lg text-white p-8">
-        <h1 className="text-3xl font-bold mb-2">Welcome back, {memberName}!</h1>
+        <h1 className="text-3xl font-bold mb-2">Welcome back, {name || 'Member'}!</h1>
         <p className="text-lg text-white/90">
-          You're logged in as a{' '}
+          You&apos;re logged in as a{' '}
           <Badge className="bg-white/20 text-white border-white/40 inline-block ml-2">
-            {memberType}
+            {role || 'Member'}
           </Badge>
         </p>
       </div>
@@ -221,7 +220,7 @@ function DashboardPage() {
               </div>
             ) : (
               <div className="p-12 text-center">
-                <p className="text-gray-500">No active loans. You haven't borrowed any resources yet.</p>
+                <p className="text-gray-500">No active loans. You haven&apos;t borrowed any resources yet.</p>
                 <Button className="mt-4" onClick={() => navigate('/available')}>
                   Browse Available Resources
                 </Button>
@@ -256,3 +255,4 @@ function StatCard({ icon, label, value, color }) {
 }
 
 export default DashboardPage;
+

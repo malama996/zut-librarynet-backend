@@ -1,54 +1,59 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
 import { toastError, toastSuccess } from '../lib/toast';
 import AuthLayout from '../layouts/AuthLayout';
-import { registerMember, syncMember } from '../api/api';
+import { auth, db } from '../firebase/config';
+import { registerMemberProfile } from '../api/api';
 
 const MEMBER_TYPES = {
     STUDENT: {
-        label:     'Student',
-        icon:      '🎓',
-        idLabel:   'Student ID',
-        idName:    'studentId',
-        idHint:    'Format: STU1234  (STU prefix + 4 or more digits)',
+        label: 'Student',
+        icon: '🎓',
+        idLabel: 'Student ID',
+        idName: 'studentId',
+        idHint: 'Format: STU1234  (STU prefix + 4 or more digits)',
         idPattern: '^[A-Z]{3}\\d{4,}$',
+        role: 'student',
         extra: [
-            { name: 'programme',    label: 'Programme',     type: 'text',   placeholder: 'e.g. Computer Science' },
-            { name: 'yearOfStudy',  label: 'Year of Study', type: 'select', options: [1,2,3,4,5,6] },
+            { name: 'programme', label: 'Programme', type: 'text', placeholder: 'e.g. Computer Science' },
+            { name: 'yearOfStudy', label: 'Year of Study', type: 'select', options: [1,2,3,4,5,6] },
         ],
     },
     LECTURER: {
-        label:    'Lecturer',
-        icon:     '👨‍🏫',
-        idLabel:  'Employee ID',
-        idName:   'employeeId',
-        idHint:    'Format: EMP01  (EMP prefix + 2 or more digits)',
+        label: 'Lecturer',
+        icon: '👨\u200d🏫',
+        idLabel: 'Employee ID',
+        idName: 'employeeId',
+        idHint: 'Format: EMP01  (EMP prefix + 2 or more digits)',
         idPattern: '^EMP\\d{2,}$',
+        role: 'lecturer',
         extra: [
-            { name: 'department',      label: 'Department',      type: 'text',   placeholder: 'e.g. Engineering' },
-            { name: 'yearsOfService',  label: 'Years of Service', type: 'number', placeholder: '0' },
+            { name: 'department', label: 'Department', type: 'text', placeholder: 'e.g. Engineering' },
+            { name: 'yearsOfService', label: 'Years of Service', type: 'number', placeholder: '0' },
         ],
     },
     RESEARCHER: {
-        label:    'Researcher',
-        icon:     '🔬',
-        idLabel:  'Researcher ID',
-        idName:   'researcherId',
-        idHint:   'Format: RES01  (RES prefix + 2 or more digits)',
+        label: 'Researcher',
+        icon: '🔬',
+        idLabel: 'Researcher ID',
+        idName: 'researcherId',
+        idHint: 'Format: RES01  (RES prefix + 2 or more digits)',
         idPattern: '^RES\\d{2,}$',
+        role: 'researcher',
         extra: [
-            { name: 'institution', label: 'Institution',   type: 'text',   placeholder: 'e.g. ZUT Research Centre' },
-            { name: 'researchArea', label: 'Research Area', type: 'text',  placeholder: 'e.g. Artificial Intelligence' },
+            { name: 'institution', label: 'Institution', type: 'text', placeholder: 'e.g. ZUT Research Centre' },
+            { name: 'researchArea', label: 'Research Area', type: 'text', placeholder: 'e.g. Artificial Intelligence' },
         ],
     },
 };
 
-function RegisterPage({ onSuccess }) {
-    const navigate = useNavigate();
+function RegisterPage() {
     const [memberType, setMemberType] = useState('STUDENT');
     const [formData, setFormData] = useState({
         name: '', email: '', password: '', confirmPassword: '', phone: '',
@@ -72,13 +77,13 @@ function RegisterPage({ onSuccess }) {
 
     const validate = () => {
         const errs = {};
-        if (!formData.name.trim())                    errs.name     = 'Name is required';
-        if (!formData.email.trim())                   errs.email    = 'Email is required';
-        if (!formData.email.includes('@'))            errs.email    = 'Invalid email address';
-        if (!formData.password)                       errs.password = 'Password is required';
-        if (formData.password.length < 6)             errs.password = 'Minimum 6 characters';
+        if (!formData.name.trim()) errs.name = 'Name is required';
+        if (!formData.email.trim()) errs.email = 'Email is required';
+        if (!formData.email.includes('@')) errs.email = 'Invalid email address';
+        if (!formData.password) errs.password = 'Password is required';
+        if (formData.password.length < 6) errs.password = 'Minimum 6 characters';
         if (formData.password !== formData.confirmPassword) errs.confirmPassword = 'Passwords do not match';
-        if (!formData.phone.trim())                   errs.phone    = 'Phone number is required';
+        if (!formData.phone.trim()) errs.phone = 'Phone number is required';
 
         const idVal = formData[type.idName];
         if (!idVal.trim()) {
@@ -103,43 +108,74 @@ function RegisterPage({ onSuccess }) {
 
         setLoading(true);
         try {
-            const idSecret = formData[type.idName];
-            const payload = {
-                name:       formData.name.trim(),
-                email:      formData.email.trim(),
-                password:   formData.password,
-                phone:      formData.phone.trim(),
-                type:       memberType,
-                idSecret,
+            // Step 1: Firebase Auth signup
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                formData.email.trim(),
+                formData.password
+            );
+            const firebaseUser = userCredential.user;
+
+            // Step 2: Update display name
+            await updateProfile(firebaseUser, { displayName: formData.name.trim() });
+
+            // Step 3: Create Firestore user profile
+            const uid = firebaseUser.uid;
+            await setDoc(doc(db, 'users', uid), {
+                uid: uid,
+                name: formData.name.trim(),
+                email: formData.email.trim().toLowerCase(),
+                role: type.role,
+                status: 'active',
+                memberType: memberType,
+                createdAt: new Date().toISOString(),
+            });
+
+            // Step 4: Get Firebase ID token for backend verification
+            const idToken = await firebaseUser.getIdToken(true);
+
+            // Step 5: Create member in backend LibraryService
+            const profilePayload = {
+                idToken: idToken,
+                uid: uid,
+                name: formData.name.trim(),
+                email: formData.email.trim().toLowerCase(),
+                phone: formData.phone.trim(),
+                type: memberType,
+                [type.idName]: formData[type.idName].trim(),
             };
             for (const field of type.extra) {
-                payload[field.name] = field.type === 'number'
+                profilePayload[field.name] = field.type === 'number'
                     ? Number(formData[field.name])
                     : formData[field.name];
             }
 
-            const response = await registerMember(payload);
-            const { user, token, memberId, memberType: respType } = response.data;
-
-            // Store userId for success screen display — NO auth token (user must log in)
-            localStorage.setItem('userId',     memberId || user.id);
-            localStorage.setItem('userName',   user.name);
-            localStorage.setItem('userEmail',  user.email);
-            localStorage.setItem('userRole',   user.role);
-            localStorage.setItem('memberType', respType || memberType);
-
-            // Sync member to Firestore for real-time visibility
             try {
-                await syncMember({ id: memberId || user.id, name: user.name, email: user.email, memberType: respType || memberType });
-            } catch (fsErr) {
-                console.warn('[Register] Firestore sync failed:', fsErr);
+                await registerMemberProfile(profilePayload);
+            } catch (apiErr) {
+                console.warn('[Register] Backend profile creation failed:', apiErr);
             }
 
-            setNewUser(user);
+            // Step 6: Sign out to prevent auto-login (user must log in manually)
+            await signOut(auth);
+
+            setNewUser({
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                role: type.role,
+                uid: uid,
+            });
             setSuccess(true);
-            toastSuccess(`${respType || memberType} registered successfully!`);
+            toastSuccess(`${type.label} registered successfully!`);
         } catch (error) {
-            toastError(error.response?.data?.message || 'Registration failed');
+            const message = error.code === 'auth/email-already-in-use'
+                ? 'Email already registered'
+                : error.code === 'auth/invalid-email'
+                ? 'Invalid email address'
+                : error.code === 'auth/weak-password'
+                ? 'Password is too weak'
+                : error.message || 'Registration failed';
+            toastError(message);
         } finally {
             setLoading(false);
         }
@@ -153,13 +189,13 @@ function RegisterPage({ onSuccess }) {
                         <MdCheckCircle style={{ fontSize: '3rem', color: '#22c55e', marginBottom: '1rem' }} />
                         <CardTitle style={{ color: '#22c55e', marginBottom: '0.5rem' }}>Registration Complete!</CardTitle>
                         <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                            Your {newUser.memberType || memberType} account is ready.
+                            Your {memberType} account is ready.
                         </p>
                         <div style={{ textAlign: 'left', backgroundColor: '#f0fdf4', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem' }}>
                             <p style={{ margin: '0.25rem 0' }}><strong>Name:</strong> {newUser.name}</p>
                             <p style={{ margin: '0.25rem 0' }}><strong>Email:</strong> {newUser.email}</p>
                             <p style={{ margin: '0.25rem 0' }}><strong>Role:</strong> {newUser.role}</p>
-                            <p style={{ margin: '0.25rem 0' }}><strong>Member ID:</strong> {localStorage.getItem('userId')}</p>
+                            <p style={{ margin: '0.25rem 0' }}><strong>UID:</strong> {newUser.uid}</p>
                         </div>
                         <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
                             Please log in with your credentials to access your dashboard.
@@ -192,7 +228,6 @@ function RegisterPage({ onSuccess }) {
 
             <Card style={{ maxWidth: '520px', margin: '0 auto' }}>
                 <CardHeader>
-                    {/* ── Member type selector ── */}
                     <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                         {Object.entries(MEMBER_TYPES).map(([key, val]) => (
                             <button
@@ -203,10 +238,10 @@ function RegisterPage({ onSuccess }) {
                                     flex: 1, minWidth: '100px', padding: '0.5rem',
                                     border: `2px solid ${memberType === key ? '#3b82f6' : '#e5e7eb'}`,
                                     borderRadius: '0.5rem',
-                                    background:   memberType === key ? '#eff6ff' : 'white',
+                                    background: memberType === key ? '#eff6ff' : 'white',
                                     cursor: 'pointer',
-                                    fontWeight:   memberType === key ? 600 : 400,
-                                    color:       memberType === key ? '#1d4ed8' : '#374151',
+                                    fontWeight: memberType === key ? 600 : 400,
+                                    color: memberType === key ? '#1d4ed8' : '#374151',
                                     transition: 'all 0.15s',
                                 }}
                             >
@@ -242,7 +277,6 @@ function RegisterPage({ onSuccess }) {
                             {errors.phone && <FormError message={errors.phone} />}
                         </FormGroup>
 
-                        {/* ── Member-type ID field ── */}
                         <FormGroup>
                             <Label>{type.idLabel} <span style={{ color: '#ef4444' }}>*</span></Label>
                             <Input name={type.idName} placeholder={type.idHint}
@@ -254,7 +288,6 @@ function RegisterPage({ onSuccess }) {
                             </small>
                         </FormGroup>
 
-                        {/* ── Type-specific extra fields ── */}
                         {type.extra.map(field => (
                             <FormGroup key={field.name}>
                                 <Label>{field.label}</Label>
@@ -267,11 +300,8 @@ function RegisterPage({ onSuccess }) {
                                             border: errors[field.name] ? '1px solid #ef4444' : '1px solid #d1d5db',
                                             fontSize: '0.875rem', backgroundColor: 'white',
                                         }}>
-                                        {(field.name === 'yearOfStudy'
-                                            ? field.options.map(o => ({ value: o, label: `Year ${o}` }))
-                                            : field.options.map(o => ({ value: o, label: o }))
-                                        ).map(opt => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        {field.options.map(o => (
+                                            <option key={o} value={o}>Year {o}</option>
                                         ))}
                                     </select>
                                 ) : (
@@ -320,3 +350,4 @@ function RegisterPage({ onSuccess }) {
 }
 
 export default RegisterPage;
+

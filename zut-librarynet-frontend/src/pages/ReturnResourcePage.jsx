@@ -3,34 +3,31 @@ import { MdWarning, MdCheckCircle } from 'react-icons/md';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { Input, Select } from '../components/ui/Form';
 import { toastSuccess, toastError } from '../lib/toast';
 import { getMemberLoans, returnResource, extendLoan } from '../api/api';
 import { updateResourceAvailability, updateLoanStatus } from '../firebase';
 import { sendReservationEmail } from '../services/emailService';
+import { useAuth } from '../hooks/useAuth';
 
 function ReturnResourcePage() {
+  const { uid } = useAuth();
   const [activeLoans, setActiveLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [returnResult, setReturnResult] = useState(null);
-  const [condition, setCondition] = useState('good');
-  const [notes, setNotes] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  const memberId = localStorage.getItem('memberId');
-
   useEffect(() => {
-    if (memberId) fetchLoans();
-  }, [memberId]);
+    if (uid) fetchLoans();
+  }, [uid]);
 
   const fetchLoans = async () => {
     setIsLoading(true);
     try {
-      const response = await getMemberLoans(memberId);
+      const response = await getMemberLoans(uid);
       if (response.data?.activeLoans) setActiveLoans(response.data.activeLoans);
       else if (Array.isArray(response.data)) setActiveLoans(response.data);
-    } catch (error) {
+    } catch {
       toastError('Failed to load loans');
     } finally {
       setIsLoading(false);
@@ -190,3 +187,4 @@ function ReturnResourcePage() {
 }
 
 export default ReturnResourcePage;
+

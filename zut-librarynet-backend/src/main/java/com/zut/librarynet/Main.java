@@ -1,5 +1,6 @@
 package com.zut.librarynet;
 
+import com.google.firebase.auth.FirebaseToken;
 import com.zut.librarynet.config.FirebaseConfig;
 import com.zut.librarynet.handlers.LibraryHandlers;
 import com.zut.librarynet.handlers.AuthHandlers;
@@ -50,7 +51,7 @@ public class Main {
             ctx.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         });
 
-        // AUTHENTICATION MIDDLEWARE
+        // AUTHENTICATION MIDDLEWARE — Firebase ID Token Verification
         app.before(ctx -> {
             String path = ctx.path();
             String method = ctx.req().getMethod();
@@ -72,21 +73,24 @@ public class Main {
                 return;
             }
 
-            // Validate token
-            String userId = AuthService.validateToken(authorization);
-            if (userId == null) {
+            // Verify Firebase ID token
+            FirebaseToken decodedToken = AuthService.verifyIdToken(authorization);
+            if (decodedToken == null) {
                 ctx.status(401).json(java.util.Map.of(
                     "error", true,
                     "code", 401,
-                    "message", "Invalid or expired token"
+                    "message", "Invalid or expired Firebase ID token"
                 ));
                 ctx.skipRemainingHandlers();
                 return;
             }
 
-            // Store userId and role in context
-            ctx.attribute("userId", userId);
-            ctx.attribute("userRole", AuthService.getRole(authorization));
+            // Store UID and role in context
+            String uid = decodedToken.getUid();
+            String role = AuthService.getRole(authorization);
+            ctx.attribute("uid", uid);
+            ctx.attribute("userRole", role);
+            System.out.printf("[Auth] Verified UID=%s, role=%s for %s %s%n", uid, role, method, path);
         });
 
         app.options("/*", ctx -> ctx.status(200));
@@ -107,12 +111,15 @@ public class Main {
         app.get("/api/statistics", libraryHandlers::getStatistics);
 
         // ============================================
-        // AUTH ENDPOINTS
+        // AUTH ENDPOINTS (public — token verification happens inside)
         // ============================================
 
-        app.post("/api/auth/login", authHandlers::login);
-        app.post("/api/auth/register/member", authHandlers::registerMember);
-        app.post("/api/auth/register/admin", authHandlers::registerAdmin);
+        app.post("/api/auth/verify", authHandlers::verifyToken);
+        app.post("/api/auth/register-profile", authHandlers::registerProfile);
+        // Legacy endpoints — redirect to new flow
+        app.post("/api/auth/login", authHandlers::verifyToken);
+        app.post("/api/auth/register/member", authHandlers::registerProfile);
+        app.post("/api/auth/register/admin", authHandlers::registerAdminProfile);
         app.post("/api/auth/logout", authHandlers::logout);
 
         // ============================================
@@ -183,21 +190,20 @@ public class Main {
 
         System.out.println();
         System.out.println("╔══════════════════════════════════════════════════════════╗");
-        System.out.println("║     ZUT LibraryNet API - Running on :7070           ║");
+        System.out.println("║     ZUT LibraryNet API - Running on :7070                ║");
         System.out.println("╠══════════════════════════════════════════════════════════╣");
-        System.out.println("║  AUTH:                                              ║");
-        System.out.println("║    POST /api/auth/login              - Login          ║");
-        System.out.println("║    POST /api/auth/register/member   - Member Reg      ║");
-        System.out.println("║    POST /api/auth/register/admin   - Admin Reg       ║");
+        System.out.println("║  AUTH (Firebase):                                        ║");
+        System.out.println("║    POST /api/auth/verify             - Verify ID Token   ║");
+        System.out.println("║    POST /api/auth/register-profile  - Register Profile   ║");
         System.out.println("╠══════════════════════════════════════════════════════════╣");
-        System.out.println("║  ADMIN (requires ADMIN role):                        ║");
-        System.out.println("║    GET/POST    /api/admin/resources                  ║");
-        System.out.println("║    PUT/DELETE /api/admin/resources/{id}              ║");
-        System.out.println("║    GET        /api/admin/users                       ║");
-        System.out.println("║    PUT        /api/admin/users/{id}                  ║");
-        System.out.println("║    GET        /api/admin/loans                        ║");
-        System.out.println("║    GET        /api/admin/reservations                 ║");
-        System.out.println("║    GET        /api/admin/stats                        ║");
+        System.out.println("║  ADMIN (requires ADMIN role):                            ║");
+        System.out.println("║    GET/POST    /api/admin/resources                      ║");
+        System.out.println("║    PUT/DELETE /api/admin/resources/{id}                  ║");
+        System.out.println("║    GET        /api/admin/users                           ║");
+        System.out.println("║    PUT        /api/admin/users/{id}                      ║");
+        System.out.println("║    GET        /api/admin/loans                           ║");
+        System.out.println("║    GET        /api/admin/reservations                    ║");
+        System.out.println("║    GET        /api/admin/stats                           ║");
         System.out.println("╚══════════════════════════════════════════════════════════╝");
     }
 }

@@ -13,14 +13,20 @@ public class ResearcherMember extends Member {
         this.researchArea = researchArea;
     }
 
+    /** Constructor with external UID (Firebase UID) */
+    public ResearcherMember(String uid, String name, String email, String phone,
+                            String researcherId, String institution, String researchArea) {
+        super(uid, name, email, phone);
+        this.researcherId = validateResearcherId(researcherId);
+        this.institution = institution;
+        this.researchArea = researchArea;
+    }
+
     private String validateResearcherId(String researcherId) {
         if (researcherId == null || researcherId.trim().isEmpty()) {
             throw new IllegalArgumentException("Researcher ID cannot be empty");
         }
-        if (!researcherId.matches("RES\\d{4}")) {
-            throw new IllegalArgumentException("Researcher ID must be RES followed by 4 digits (e.g., RES0001)");
-        }
-        return researcherId;
+        return researcherId.trim();
     }
 
     public String getResearcherId() { return researcherId; }

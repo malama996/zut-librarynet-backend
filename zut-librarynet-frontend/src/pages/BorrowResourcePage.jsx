@@ -5,15 +5,15 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { toastSuccess, toastError } from '../lib/toast';
 import { getAllResources, borrowResource, createReservation } from '../api/api';
+import { useAuth } from '../hooks/useAuth';
 
 function BorrowResourcePage() {
+  const { uid } = useAuth();
   const [resources, setResources] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedResource, setSelectedResource] = useState(null);
   const [borrowedResource, setBorrowedResource] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
-
-  const memberId = localStorage.getItem('memberId');
 
   // Fetch resources on mount
   useEffect(() => {
@@ -38,7 +38,7 @@ function BorrowResourcePage() {
   };
 
   const handleBorrow = async (resource) => {
-    if (!memberId) {
+    if (!uid) {
       toastError('Please log in to borrow');
       return;
     }
@@ -47,7 +47,7 @@ function BorrowResourcePage() {
     setActionLoading(resource.id);
 
     try {
-      const response = await borrowResource(memberId, resource.id);
+      const response = await borrowResource(uid, resource.id);
       setBorrowedResource({
         ...resource,
         dueDate: response.data?.dueDate,
@@ -78,7 +78,7 @@ function BorrowResourcePage() {
   };
 
   const handleReserve = async (resource) => {
-    if (!memberId) {
+    if (!uid) {
       toastError('Please log in to reserve');
       return;
     }
@@ -86,7 +86,7 @@ function BorrowResourcePage() {
     setActionLoading(resource.id);
 
     try {
-      await createReservation(memberId, resource.id);
+      await createReservation(uid, resource.id);
       toastSuccess(`Reserved "${resource.title}". You'll be notified when available.`);
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to reserve';
@@ -210,3 +210,4 @@ function BorrowResourcePage() {
 }
 
 export default BorrowResourcePage;
+

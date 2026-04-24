@@ -13,14 +13,20 @@ public class LecturerMember extends Member {
         this.yearsOfService = validateYearsOfService(yearsOfService);
     }
 
+    /** Constructor with external UID (Firebase UID) */
+    public LecturerMember(String uid, String name, String email, String phone,
+                          String employeeId, String department, int yearsOfService) {
+        super(uid, name, email, phone);
+        this.employeeId = validateEmployeeId(employeeId);
+        this.department = department;
+        this.yearsOfService = validateYearsOfService(yearsOfService);
+    }
+
     private String validateEmployeeId(String employeeId) {
         if (employeeId == null || employeeId.trim().isEmpty()) {
             throw new IllegalArgumentException("Employee ID cannot be empty");
         }
-        if (!employeeId.matches("EMP\\d{3}")) {
-            throw new IllegalArgumentException("Employee ID must be EMP followed by 3 digits (e.g., EMP001)");
-        }
-        return employeeId;
+        return employeeId.trim();
     }
 
     private int validateYearsOfService(int yearsOfService) {
@@ -74,3 +80,4 @@ public class LecturerMember extends Member {
         return fields;
     }
 }
+

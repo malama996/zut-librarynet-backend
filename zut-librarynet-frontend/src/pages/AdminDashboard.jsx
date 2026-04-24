@@ -17,6 +17,7 @@ import {
   adminGetStats
 } from '../api/api';
 import { MdLibraryBooks, MdPeople, MdAssignment, MdDashboard, MdAdd, MdEdit, MdDelete, MdRefresh, MdEvent } from 'react-icons/md';
+import { useAuth } from '../hooks/useAuth';
 
 // TABS
 const TABS = {
@@ -28,11 +29,13 @@ const TABS = {
 };
 
 function AdminDashboard() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState(TABS.DASHBOARD);
   const [stats, setStats] = useState(null);
   const [resources, setResources] = useState([]);
   const [users, setUsers] = useState([]);
   const [loans, setLoans] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [reservations, setReservations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,9 +46,6 @@ function AdminDashboard() {
     type: 'Book', title: '', publisher: '', author: '', isbn: '',
     issn: '', volume: '', issue: '', url: '', accessDate: ''
   });
-
-  const userRole = localStorage.getItem('userRole');
-  const isAdmin = userRole === 'ADMIN';
 
   useEffect(() => {
     if (isAdmin) {
@@ -490,3 +490,4 @@ function StatCard({ label, value, color }) {
 }
 
 export default AdminDashboard;
+

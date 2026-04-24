@@ -29,6 +29,7 @@ public class User {
     public static final String TYPE_LECTURER   = "LECTURER";
     public static final String TYPE_RESEARCHER = "RESEARCHER";
 
+    /** Legacy constructor — auto-generates UUID (for backward compatibility) */
     public User(String name, String email, String passwordHash, String role) {
         this.id           = UUID.randomUUID().toString();
         this.name         = name;
@@ -38,10 +39,14 @@ public class User {
         this.createdAt    = LocalDateTime.now();
     }
 
-    /** Constructor for member with specific type */
-    public User(String name, String email, String passwordHash, String role, String memberType) {
-        this(name, email, passwordHash, role);
-        this.memberType = memberType;
+    /** Firebase UID constructor — uses provided UID as the identity key */
+    public User(String uid, String name, String email, String passwordHash, String role) {
+        this.id           = uid != null && !uid.trim().isEmpty() ? uid : UUID.randomUUID().toString();
+        this.name         = name;
+        this.email        = email;
+        this.passwordHash = passwordHash;
+        this.role         = role;
+        this.createdAt    = LocalDateTime.now();
     }
 
     // Getters
@@ -68,3 +73,4 @@ public class User {
                 id, name, email, role, memberType);
     }
 }
+

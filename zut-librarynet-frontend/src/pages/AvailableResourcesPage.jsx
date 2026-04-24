@@ -10,16 +10,14 @@ import {
   getAllResources, searchResources, borrowResource, createReservation
 } from '../api/api';
 import { updateResourceAvailability, addLoanToFirestore, addReservationToFirestore } from '../firebase';
-import { sendReservationEmail } from '../services/emailService';
+import { useAuth } from '../hooks/useAuth';
 
 function AvailableResourcesPage() {
+  const { uid } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [resources, setResources] = useState([]);
   const [actionLoading, setActionLoading] = useState(null);
-
-  const memberId = localStorage.getItem('memberId');
-  const memberName = localStorage.getItem('memberName');
 
   // Fetch resources from API
   useEffect(() => {
@@ -57,7 +55,7 @@ function AvailableResourcesPage() {
       } else if (Array.isArray(response.data)) {
         setResources(response.data);
       }
-    } catch (error) {
+    } catch {
       toastError('Search failed');
     } finally {
       setIsLoading(false);
@@ -66,13 +64,13 @@ function AvailableResourcesPage() {
 
   // Handle borrow with Firestore sync
   const handleBorrow = async (resource) => {
-    if (!memberId) {
+    if (!uid) {
       toastError('Please log in to borrow');
       return;
     }
     setActionLoading(resource.id);
     try {
-      const response = await borrowResource(memberId, resource.id);
+      const response = await borrowResource(uid, resource.id);
       const loanData = response.data;
 
       toastSuccess(`Successfully borrowed "${resource.title}"!`);
@@ -80,7 +78,7 @@ function AvailableResourcesPage() {
       // Sync to Firestore for real-time updates
       await addLoanToFirestore({
         loanId: loanData.loanId,
-        memberId,
+        userId: uid,
         resourceId: resource.id,
         resourceTitle: resource.title,
         borrowDate: new Date().toISOString(),
@@ -104,13 +102,13 @@ function AvailableResourcesPage() {
 
   // Handle reserve with Firestore sync
   const handleReserve = async (resource) => {
-    if (!memberId) {
+    if (!uid) {
       toastError('Please log in to reserve');
       return;
     }
     setActionLoading(resource.id);
     try {
-      const response = await createReservation(memberId, resource.id);
+      const response = await createReservation(uid, resource.id);
       const reservationData = response.data;
 
       toastSuccess(`Reserved "${resource.title}". You'll be notified when available.`);
@@ -118,7 +116,7 @@ function AvailableResourcesPage() {
       // Sync to Firestore
       await addReservationToFirestore({
         reservationId: reservationData.reservationId,
-        memberId,
+        userId: uid,
         resourceId: resource.id,
         resourceTitle: resource.title,
         status: 'PENDING'
@@ -227,3 +225,4 @@ function AvailableResourcesPage() {
 }
 
 export default AvailableResourcesPage;
+
