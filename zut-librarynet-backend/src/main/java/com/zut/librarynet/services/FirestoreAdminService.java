@@ -51,26 +51,71 @@ public class FirestoreAdminService {
         return result;
     }
 
-    public Map<String, Object> createResource(String type, String title, String publisher, String author, String isbn) {
+    /**
+     * Creates a resource document in Firestore, preserving ALL fields from the input map.
+     * This replaces the old 5-parameter method that silently dropped Journal/Digital fields.
+     *
+     * @param data  Full resource data map from the frontend (title, type, publisher + type-specific fields)
+     * @return      The stored data map, with "id" injected
+     */
+    public Map<String, Object> createResource(Map<String, Object> data) {
         String id = "res-" + System.currentTimeMillis();
+
+        // Build the stored document — start from the input so NOTHING is dropped
+        Map<String, Object> stored = new HashMap<>(data);
+
+        // Ensure mandatory metadata fields are always set
+        stored.putIfAbsent("available", true);
+        stored.put("createdAt", java.time.LocalDateTime.now().toString());
+
+        // Normalise the resource type key (the frontend sends "Book", "Journal", "Digital")
+        if (!stored.containsKey("type")) {
+            stored.put("type", "Book"); // safe default
+        }
+
+        // Map frontend field aliases to backend-canonical names
+        // Journal: frontend may send "journalTitle" — store it as "title" too
+        if (stored.containsKey("journalTitle") && !stored.containsKey("title")) {
+            stored.put("title", stored.get("journalTitle"));
+        }
+        // Digital: frontend sends "resourceTitle" — store as "title" too
+        if (stored.containsKey("resourceTitle") && !stored.containsKey("title")) {
+            stored.put("title", stored.get("resourceTitle"));
+        }
+        // Digital: frontend sends "provider" — store as "publisher" too
+        if (stored.containsKey("provider") && !stored.containsKey("publisher")) {
+            stored.put("publisher", stored.get("provider"));
+        }
+        // Digital: frontend sends "accessUrl" — also store as "url"
+        if (stored.containsKey("accessUrl") && !stored.containsKey("url")) {
+            stored.put("url", stored.get("accessUrl"));
+        }
+
+        try {
+            FirestoreClient.setDocument(RESOURCES_COL, id, stored);
+            stored.put("id", id);
+            System.out.println("[FirestoreAdminService] Created resource in Firestore: " + id
+                + " type=" + stored.get("type")
+                + " title=" + stored.get("title"));
+        } catch (Exception e) {
+            System.err.println("[FirestoreAdminService] Error creating resource: " + e.getMessage());
+            throw new RuntimeException("Failed to create resource", e);
+        }
+        return stored;
+    }
+
+    /**
+     * @deprecated Use createResource(Map) instead — this signature silently drops Journal/Digital fields.
+     */
+    @Deprecated
+    public Map<String, Object> createResource(String type, String title, String publisher, String author, String isbn) {
         Map<String, Object> data = new HashMap<>();
         data.put("type", type);
         data.put("title", title);
         data.put("publisher", publisher);
         data.put("author", author);
         data.put("isbn", isbn);
-        data.put("available", true);
-        data.put("createdAt", java.time.LocalDateTime.now().toString());
-
-        try {
-            FirestoreClient.setDocument(RESOURCES_COL, id, data);
-            data.put("id", id);
-            System.out.println("[FirestoreAdminService] Created resource in Firebase: " + id);
-        } catch (Exception e) {
-            System.err.println("[FirestoreAdminService] Error creating resource: " + e.getMessage());
-            throw new RuntimeException("Failed to create resource", e);
-        }
-        return data;
+        return createResource(data);
     }
 
     public Map<String, Object> updateResource(String id, Map<String, Object> data) {

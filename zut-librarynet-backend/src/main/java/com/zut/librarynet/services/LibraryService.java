@@ -200,21 +200,34 @@ public class LibraryService {
                 }
                 case "journal": {
                     String issn = getStringOrDefault(data.get("issn"), "0000-0000");
-                    int volume = safeIntValue(data.get("volume"), 1);
-                    int issue = safeIntValue(data.get("issue"), 1);
-                    resource = new Journal(id, title, publisher, issn, volume, issue);
+                    // Volume is stored as String; fall back to int fields for legacy documents
+                    String volume = getStringOrDefault(data.get("volume"), null);
+                    if (volume == null) {
+                        int volInt = safeIntValue(data.get("volumeInt"), safeIntValue(data.get("volume"), 1));
+                        volume = String.valueOf(volInt);
+                    }
+                    String publicationDate = getStringOrDefault(data.get("publicationDate"), "");
+                    String subjectArea = getStringOrDefault(data.get("subjectArea"), getStringOrDefault(data.get("subject"), ""));
+                    resource = new Journal(id, title, publisher, issn, volume, publicationDate, subjectArea);
                     break;
                 }
                 case "digital": {
-                    String url = getStringOrDefault(data.get("url"), "https://example.com");
+                    // Support both "url" and "accessUrl" field names
+                    String url = getStringOrDefault(data.get("url"),
+                                 getStringOrDefault(data.get("accessUrl"), "https://example.com"));
+                    String accessType = getStringOrDefault(data.get("accessType"), "");
+                    String format = getStringOrDefault(data.get("format"), "");
+                    String category = getStringOrDefault(data.get("category"), "");
                     String expiryStr = (String) data.get("licenceExpiry");
-                    LocalDate expiry;
-                    try {
-                        expiry = expiryStr != null ? LocalDate.parse(expiryStr) : LocalDate.now().plusYears(1);
-                    } catch (Exception ex) {
-                        expiry = LocalDate.now().plusYears(1);
+                    LocalDate expiry = null;
+                    if (expiryStr != null && !expiryStr.isBlank()) {
+                        try {
+                            expiry = LocalDate.parse(expiryStr);
+                        } catch (Exception ex) {
+                            // Invalid date format — treat as no expiry
+                        }
                     }
-                    resource = new DigitalResource(id, title, publisher, url, expiry);
+                    resource = new DigitalResource(id, title, publisher, url, accessType, format, category, expiry);
                     break;
                 }
                 default:
@@ -241,10 +254,23 @@ public class LibraryService {
         String email = (String) data.get("email");
         String phone = getStringOrDefault(data.get("phone"), "N/A");
         String type = (String) data.get("type");
-
         if (type == null) type = (String) data.get("memberType");
+        // 🔑 KEY FIX: also check the "role" field — admin users only have this field
+        if (type == null) type = (String) data.get("role");
 
-        if (name == null || email == null) return null;
+        // ── DEBUG: log email to diagnose empty-recipient issue ──
+        System.out.println("[LibraryService] documentToMember id=" + id
+            + " name='" + name + "' email='" + email + "' type='" + type + "'");
+
+        if (name == null || name.isBlank()) {
+            System.err.println("[LibraryService] ⚠ Skipping member id=" + id + " — name is null/blank");
+            return null;
+        }
+        if (email == null || email.isBlank()) {
+            System.err.println("[LibraryService] ⚠ Skipping member id=" + id + " — email is null/blank. " +
+                "Check Firestore document for field named exactly 'email' (case-sensitive)");
+            return null;
+        }
 
         try {
             Member member;
@@ -268,7 +294,19 @@ public class LibraryService {
                 String institution = getStringOrDefault(data.get("institution"), "ZUT");
                 String researchArea = getStringOrDefault(data.get("researchArea"), "General");
                 member = new ResearcherMember(id, name, email, phone, researcherId, institution, researchArea);
+            } else if (normalizedType.contains("admin")) {
+                // ADMIN accounts live in Firestore but are not LibraryService members — silently skip
+                System.out.println("[LibraryService] ℹ Skipping admin account id=" + id);
+                return null;
+            } else if (normalizedType.isEmpty()) {
+                // No type/memberType/role field at all — likely an admin or system account
+                System.out.println("[LibraryService] ℹ Skipping account id=" + id
+                    + " — no member type found (type/memberType/role all null)");
+                return null;
             } else {
+                // Has a type value but it doesn't match any known member type
+                System.err.println("[LibraryService] ⚠ Unrecognised member type '" + type
+                    + "' for id=" + id + " — expected: student, lecturer, researcher, admin");
                 return null;
             }
 
@@ -512,22 +550,39 @@ public class LibraryService {
         LibraryResource resource;
         switch (type.toLowerCase()) {
             case "book":
-                resource = new Book(title, publisher,
+                resource = new Book(
+                        null,   // id — auto-generated by LibraryResource
+                        title, publisher,
                         (String) data.get("isbn"),
                         (String) data.get("author"),
-                        (String) data.get("edition"));
+                        (String) data.get("edition"),
+                        getStringOrDefault(data.get("genre"), ""));
                 break;
-            case "journal":
-                resource = new Journal(title, publisher,
-                        (String) data.get("issn"),
-                        safeIntValue(data.get("volume")),
-                        safeIntValue(data.get("issue")));
+            case "journal": {
+                String issn = getStringOrDefault(data.get("issn"), "0000-0000");
+                // Volume can be a rich String ("Vol. 45, No. 3") or a plain number
+                String volume = getStringOrDefault(data.get("volume"), "1");
+                String publicationDate = getStringOrDefault(data.get("publicationDate"), "");
+                String subjectArea = getStringOrDefault(data.get("subjectArea"),
+                                     getStringOrDefault(data.get("subject"), ""));
+                resource = new Journal(title, publisher, issn, volume, publicationDate, subjectArea);
                 break;
-            case "digital":
-                resource = new DigitalResource(title, publisher,
-                        (String) data.get("url"),
-                        LocalDate.parse((String) data.get("licenceExpiry")));
+            }
+            case "digital": {
+                // Accept both "url" and "accessUrl"
+                String url = getStringOrDefault(data.get("url"),
+                             getStringOrDefault(data.get("accessUrl"), "https://example.com"));
+                String accessType = getStringOrDefault(data.get("accessType"), "");
+                String format = getStringOrDefault(data.get("format"), "");
+                String category = getStringOrDefault(data.get("category"), "");
+                LocalDate licenceExpiry = null;
+                String expiryStr = getStringOrDefault(data.get("licenceExpiry"), null);
+                if (expiryStr != null && !expiryStr.isBlank()) {
+                    try { licenceExpiry = LocalDate.parse(expiryStr); } catch (Exception ignored) {}
+                }
+                resource = new DigitalResource(title, publisher, url, accessType, format, category, licenceExpiry);
                 break;
+            }
             default:
                 throw new IllegalArgumentException("Invalid resource type: " + type);
         }

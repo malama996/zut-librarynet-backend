@@ -4,12 +4,17 @@ import com.zut.librarynet.models.LibraryResource;
 import com.zut.librarynet.models.Loan;
 import com.zut.librarynet.models.Member;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 public class EmailService {
 
@@ -23,11 +28,54 @@ public class EmailService {
     private final String serviceId;
     private final String templateId;
 
-    // 🔥 BOTH KEYS NOW SUPPORTED
+    // 🔥 BOTH KEYS SUPPORTED
     private final String publicKey;
     private final String privateKey;
 
     private final boolean configured;
+
+    // ============================================================
+    // .env FILE LOADER — reads KEY=VALUE pairs from .env at startup
+    // ============================================================
+    private static final Map<String, String> DOT_ENV = new HashMap<>();
+
+    static {
+        // Try to locate .env file relative to working directory or one level up
+        String[] candidatePaths = {
+            ".env",
+            "zut-librarynet-backend/.env",
+            "../.env"
+        };
+        for (String path : candidatePaths) {
+            File envFile = new File(path);
+            if (envFile.exists()) {
+                try {
+                    for (String line : Files.readAllLines(envFile.toPath(), StandardCharsets.UTF_8)) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+                        int eq = line.indexOf('=');
+                        if (eq > 0) {
+                            String key = line.substring(0, eq).trim();
+                            String value = line.substring(eq + 1).trim();
+                            // Strip surrounding quotes if present
+                            if (value.startsWith("\"") && value.endsWith("\""))
+                                value = value.substring(1, value.length() - 1);
+                            if (value.startsWith("'") && value.endsWith("'"))
+                                value = value.substring(1, value.length() - 1);
+                            DOT_ENV.put(key, value);
+                        }
+                    }
+                    System.out.println("[EmailService] Loaded .env from: " + envFile.getAbsolutePath());
+                    break;
+                } catch (IOException e) {
+                    System.err.println("[EmailService] Failed to read .env at " + path + ": " + e.getMessage());
+                }
+            }
+        }
+        if (DOT_ENV.isEmpty()) {
+            System.out.println("[EmailService] No .env file found — relying on process environment variables");
+        }
+    }
 
     // ============================================================
     // INIT
@@ -55,9 +103,17 @@ public class EmailService {
                 && !templateId.isEmpty()
                 && !publicKey.isEmpty();
 
-        System.out.println(configured
-                ? "[EmailService] EmailJS configured ✅"
-                : "[EmailService] EmailJS NOT configured ❌");
+        if (configured) {
+            System.out.println("[EmailService] EmailJS configured ✅");
+            System.out.println("[EmailService] Service ID : " + serviceId);
+            System.out.println("[EmailService] Template ID: " + templateId);
+            System.out.println("[EmailService] Public Key : " + publicKey.substring(0, Math.min(6, publicKey.length())) + "***");
+        } else {
+            System.out.println("[EmailService] EmailJS NOT configured ❌");
+            System.out.println("  → EMAILJS_SERVICE_ID  : " + (serviceId.isEmpty() ? "MISSING" : "✓"));
+            System.out.println("  → EMAILJS_TEMPLATE_ID : " + (templateId.isEmpty() ? "MISSING" : "✓"));
+            System.out.println("  → EMAILJS_PUBLIC_KEY  : " + (publicKey.isEmpty() ? "MISSING" : "✓"));
+        }
     }
 
     public static synchronized EmailService getInstance() {
@@ -66,7 +122,7 @@ public class EmailService {
     }
 
     // ============================================================
-    // 🎯 CORE EMAIL METHOD
+    // 🎯 CORE EMAIL METHOD — with full null validation
     // ============================================================
     private void sendEmail(Member member,
                            String eventType,
@@ -75,21 +131,46 @@ public class EmailService {
                            int daysOverdue,
                            double fineAmount) {
 
+        // ── GUARD: validate member
+        if (member == null) {
+            System.err.println("[EmailService] ❌ Cannot send email — member is null");
+            return;
+        }
+
+        // ── GUARD: validate email (the root cause of "recipients address is empty")
+        String recipientEmail = member.getEmail();
+        System.out.println("[EmailService] 📧 Recipient email from member: '" + recipientEmail + "'");
+        if (recipientEmail == null || recipientEmail.isBlank()) {
+            System.err.println("[EmailService] ❌ STOPPED — member email is null or blank. MemberId=" + member.getId());
+            return;
+        }
+
+        // ── GUARD: validate name
+        String recipientName = member.getName();
+        if (recipientName == null || recipientName.isBlank()) {
+            System.err.println("[EmailService] ⚠ Member name is blank — using fallback 'Library Member'");
+            recipientName = "Library Member";
+        }
+
         if (!configured) {
             System.out.println("[EmailService DEMO] " + eventType +
-                    " → " + member.getEmail());
+                    " → " + recipientEmail + " (" + recipientName + ")");
             return;
         }
 
         String json = buildJsonBody(
-                member.getName(),
-                member.getEmail(),
+                recipientName,
+                recipientEmail,
                 eventType,
                 message,
                 safe(bookTitle),
                 formatInt(daysOverdue),
                 formatMoney(fineAmount)
         );
+
+        // ── DEBUG: print the full payload before sending
+        System.out.println("[EmailService] 📤 Sending email to: " + recipientEmail);
+        System.out.println("[EmailService] 📦 JSON Payload:\n" + json);
 
         sendAsync(json);
     }
@@ -142,7 +223,7 @@ public class EmailService {
     }
 
     // ============================================================
-    // 📡 EMAILJS REQUEST BODY (FIXED)
+    // 📡 EMAILJS REQUEST BODY
     // ============================================================
     private String buildJsonBody(String toName,
                                  String toEmail,
@@ -155,8 +236,8 @@ public class EmailService {
         return "{"
                 + "\"service_id\":\"" + escape(serviceId) + "\","
                 + "\"template_id\":\"" + escape(templateId) + "\","
-                + "\"user_id\":\"" + escape(publicKey) + "\","      // 🔥 REQUIRED
-                + "\"accessToken\":\"" + escape(privateKey) + "\"," // 🔐 OPTIONAL SECURITY
+                + "\"user_id\":\"" + escape(publicKey) + "\","      // 🔥 REQUIRED by EmailJS REST API
+                + "\"accessToken\":\"" + escape(privateKey) + "\"," // 🔐 Optional security
                 + "\"template_params\":{"
                 + "\"to_name\":\"" + escape(toName) + "\","
                 + "\"to_email\":\"" + escape(toEmail) + "\","
@@ -184,11 +265,11 @@ public class EmailService {
                     if (res.statusCode() == 200) {
                         System.out.println("[EmailService] ✅ Email sent successfully");
                     } else {
-                        System.err.println("[EmailService] ❌ EmailJS error: " + res.body());
+                        System.err.println("[EmailService] ❌ EmailJS error (HTTP " + res.statusCode() + "): " + res.body());
                     }
                 })
                 .exceptionally(ex -> {
-                    System.err.println("[EmailService] ❌ Failed: " + ex.getMessage());
+                    System.err.println("[EmailService] ❌ Failed to send email: " + ex.getMessage());
                     return null;
                 });
     }
@@ -217,10 +298,16 @@ public class EmailService {
     }
 
     // ============================================================
-    // 🌐 ENV LOADER
+    // 🌐 ENV LOADER — checks .env map first, then process env
     // ============================================================
     private static String getEnv(String key, String def) {
+        // 1. Check .env file values loaded at startup
+        String dotEnvValue = DOT_ENV.get(key);
+        if (dotEnvValue != null && !dotEnvValue.isEmpty()) {
+            return dotEnvValue;
+        }
+        // 2. Fall back to real process environment variable
         String v = System.getenv(key);
-        return (v != null) ? v : def;
+        return (v != null && !v.isEmpty()) ? v : def;
     }
 }

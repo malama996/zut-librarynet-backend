@@ -9,17 +9,31 @@ public class Book extends LibraryResource {
     private String isbn;
     private String author;
     private String edition;
+    /** Genre / subject area (e.g. "Computer Science", "Fiction") */
+    private String genre;
 
-    public Book(String id, String title, String publisher, String isbn, String author, String edition) {
+    // Full constructor — includes id and genre
+    public Book(String id, String title, String publisher,
+                String isbn, String author, String edition, String genre) {
         super(id, title, publisher);
         this.isbn = validateIsbn(isbn);
         this.author = validateAuthor(author);
         this.edition = edition != null ? edition : "1st";
+        this.genre = genre != null ? genre.trim() : "";
     }
 
-    public Book(String title, String publisher, String isbn, String author, String edition) {
-        this(null, title, publisher, isbn, author, edition);
+    // Backward-compat: id + no genre
+    public Book(String id, String title, String publisher, String isbn, String author, String edition) {
+        this(id, title, publisher, isbn, author, edition, "");
     }
+
+    // No id, no genre (5 params — used by LibraryService.addResource)
+    public Book(String title, String publisher, String isbn, String author, String edition) {
+        this(null, title, publisher, isbn, author, edition, "");
+    }
+    // NOTE: There is intentionally NO 6-String (title+genre, no id) constructor
+    // because it would be identical to the (id, title, publisher, isbn, author, edition) signature.
+    // Use: new Book(null, title, publisher, isbn, author, edition, genre) instead.
 
 
     // ENCAPSULATION: Validation for book-specific fields
@@ -59,10 +73,12 @@ public class Book extends LibraryResource {
     public String getIsbn() { return isbn; }
     public String getAuthor() { return author; }
     public String getEdition() { return edition; }
+    public String getGenre() { return genre; }
 
     public void setIsbn(String isbn) { this.isbn = validateIsbn(isbn); }
     public void setAuthor(String author) { this.author = validateAuthor(author); }
     public void setEdition(String edition) { this.edition = edition; }
+    public void setGenre(String genre) { this.genre = genre != null ? genre.trim() : ""; }
 
     // POLYMORPHISM: Implementing abstract methods from LibraryResource
     @Override
@@ -87,6 +103,7 @@ public class Book extends LibraryResource {
         fields.put("isbn", this.isbn);
         fields.put("author", this.author);
         fields.put("edition", this.edition);
+        fields.put("genre", this.genre);
         return fields;
     }
 }

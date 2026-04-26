@@ -57,29 +57,73 @@ public class AdminHandlers {
         requireAdmin(ctx);
         try {
             Map<String, Object> data = gson.fromJson(ctx.body(), Map.class);
-            if (data == null || !data.containsKey("title")) {
-                sendError(ctx, HttpStatus.BAD_REQUEST, "Title is required");
+            if (data == null) {
+                sendError(ctx, HttpStatus.BAD_REQUEST, "Request body is required");
                 return;
             }
 
             String type = (String) data.getOrDefault("type", "Book");
-            String title = (String) data.get("title");
-            String publisher = (String) data.getOrDefault("publisher", "Unknown");
-            String author = (String) data.get("author");
-            String isbn = (String) data.get("isbn");
 
-            Map<String, Object> resource = firestore.createResource(type, title, publisher, author, isbn);
+            // ── Per-type field normalization ─────────────────────────────────────
+            // Ensure "title" and "publisher" are always set (required by LibraryResource base)
+            switch (type.toLowerCase()) {
+                case "journal": {
+                    // Frontend may send "journalTitle" — normalize to "title"
+                    if (!data.containsKey("title") && data.containsKey("journalTitle")) {
+                        data.put("title", data.get("journalTitle"));
+                    }
+                    // Validate required fields
+                    if (data.get("title") == null || data.get("title").toString().isBlank()) {
+                        sendError(ctx, HttpStatus.BAD_REQUEST, "Journal Title is required");
+                        return;
+                    }
+                    data.putIfAbsent("publisher", "Unknown Publisher");
+                    data.putIfAbsent("issn", "0000-0000");
+                    break;
+                }
+                case "digital": {
+                    // Frontend sends "resourceTitle" and "provider" — normalize
+                    if (!data.containsKey("title") && data.containsKey("resourceTitle")) {
+                        data.put("title", data.get("resourceTitle"));
+                    }
+                    if (!data.containsKey("publisher") && data.containsKey("provider")) {
+                        data.put("publisher", data.get("provider"));
+                    }
+                    // Frontend sends "accessUrl" — also alias to "url"
+                    if (!data.containsKey("url") && data.containsKey("accessUrl")) {
+                        data.put("url", data.get("accessUrl"));
+                    }
+                    if (data.get("title") == null || data.get("title").toString().isBlank()) {
+                        sendError(ctx, HttpStatus.BAD_REQUEST, "Resource Title is required");
+                        return;
+                    }
+                    data.putIfAbsent("publisher", "Unknown Provider");
+                    data.putIfAbsent("url", "https://example.com");
+                    break;
+                }
+                default: { // "book"
+                    if (data.get("title") == null || data.get("title").toString().isBlank()) {
+                        sendError(ctx, HttpStatus.BAD_REQUEST, "Book Title is required");
+                        return;
+                    }
+                    data.putIfAbsent("publisher", "Unknown Publisher");
+                    data.putIfAbsent("isbn", "UNKNOWN-ISBN");
+                    data.putIfAbsent("author", "Unknown Author");
+                    data.putIfAbsent("edition", "1st");
+                    break;
+                }
+            }
 
+            // ── Save to Firestore (full map — nothing dropped) ──────────────────
+            Map<String, Object> resource = firestore.createResource(data);
+
+            // ── Optionally sync to in-memory LibraryService cache ──────────────
             if (libraryService != null) {
                 try {
-                    Map<String, Object> libraryData = new HashMap<>();
-                    libraryData.put("title", title);
-                    libraryData.put("publisher", publisher);
-                    libraryData.put("author", author);
-                    libraryData.put("isbn", isbn);
-                    libraryService.addResource(type, libraryData);
+                    libraryService.addResource(type, data);
                 } catch (Exception e) {
-                    System.err.println("[AdminHandlers] Failed to sync to LibraryService: " + e.getMessage());
+                    // Non-fatal: Firestore is source of truth
+                    System.err.println("[AdminHandlers] LibraryService sync skipped: " + e.getMessage());
                 }
             }
 
@@ -88,6 +132,7 @@ public class AdminHandlers {
             response.put("message", "Resource created successfully");
             response.put("data", resource);
             ctx.status(HttpStatus.CREATED).json(response);
+
         } catch (Exception e) {
             sendError(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create resource: " + e.getMessage());
         }

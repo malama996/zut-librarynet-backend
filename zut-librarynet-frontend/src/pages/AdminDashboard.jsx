@@ -36,7 +36,7 @@ const RESOURCE_TYPES = {
       { name: 'title', label: 'Title', placeholder: 'e.g. Introduction to Algorithms', required: true },
       { name: 'author', label: 'Author', placeholder: 'e.g. Thomas H. Cormen', required: false },
       { name: 'publisher', label: 'Publisher', placeholder: 'e.g. MIT Press', required: false },
-      { name: 'isbn', label: 'ISBN', placeholder: 'e.g. 978-0262033848', required: false },
+      { name: 'isbn', label: 'ISBN', placeholder: 'e.g. 9780262033848', required: false },
       { name: 'edition', label: 'Edition', placeholder: 'e.g. 3rd Edition', required: false },
       { name: 'genre', label: 'Genre', placeholder: 'e.g. Computer Science', required: false },
     ]
@@ -47,9 +47,9 @@ const RESOURCE_TYPES = {
       { name: 'title', label: 'Journal Title', placeholder: 'e.g. Nature Reviews Computer Science', required: true },
       { name: 'publisher', label: 'Publisher', placeholder: 'e.g. Nature Publishing Group', required: false },
       { name: 'issn', label: 'ISSN', placeholder: 'e.g. 0028-0836', required: false },
-      { name: 'volume', label: 'Volume', placeholder: 'e.g. Vol. 45, No. 3', required: false },
+      { name: 'volume', label: 'Volume / Issue', placeholder: 'e.g. Vol. 45, No. 3', required: false },
       { name: 'publicationDate', label: 'Publication Date', placeholder: 'e.g. March 2024', required: false },
-      { name: 'subject', label: 'Subject Area', placeholder: 'e.g. Artificial Intelligence', required: false },
+      { name: 'subjectArea', label: 'Subject Area', placeholder: 'e.g. Artificial Intelligence', required: false },
     ]
   },
   Digital: {
@@ -77,8 +77,15 @@ function AdminDashboard() {
 
   const [showResourceForm, setShowResourceForm] = useState(false);
   const [editingResource, setEditingResource] = useState(null);
+  // Form state holds ALL possible fields; unused ones are simply empty strings
   const [resourceForm, setResourceForm] = useState({
-    type: 'Book', title: '', publisher: '', author: '', isbn: ''
+    type: 'Book',
+    // Book
+    title: '', author: '', publisher: '', isbn: '', edition: '', genre: '',
+    // Journal
+    issn: '', volume: '', publicationDate: '', subjectArea: '',
+    // Digital
+    url: '', accessType: '', format: '', category: '',
   });
 
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, resourceId: null });
@@ -140,7 +147,13 @@ function AdminDashboard() {
       }
       setShowResourceForm(false);
       setEditingResource(null);
-      setResourceForm({ type: 'Book', title: '', publisher: '', author: '', isbn: '' });
+      // Reset form — keep type selection, clear all values
+      setResourceForm({
+        type: resourceForm.type,
+        title: '', author: '', publisher: '', isbn: '', edition: '', genre: '',
+        issn: '', volume: '', publicationDate: '', subjectArea: '',
+        url: '', accessType: '', format: '', category: '',
+      });
       refreshResources();
     } catch (error) {
       toastError(error.response?.data?.message || 'Operation failed');
@@ -151,10 +164,24 @@ function AdminDashboard() {
     setEditingResource(resource);
     setResourceForm({
       type: resource.type || 'Book',
+      // Common
       title: resource.title || '',
       publisher: resource.publisher || '',
+      // Book fields
       author: resource.author || '',
-      isbn: resource.isbn || ''
+      isbn: resource.isbn || '',
+      edition: resource.edition || '',
+      genre: resource.genre || '',
+      // Journal fields
+      issn: resource.issn || '',
+      volume: resource.volume || '',
+      publicationDate: resource.publicationDate || '',
+      subjectArea: resource.subjectArea || '',
+      // Digital fields
+      url: resource.url || resource.accessUrl || '',
+      accessType: resource.accessType || '',
+      format: resource.format || '',
+      category: resource.category || '',
     });
     setShowResourceForm(true);
   };
