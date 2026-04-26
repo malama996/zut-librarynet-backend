@@ -5,22 +5,32 @@ public class Journal extends LibraryResource {
     private int volume;
     private int issue;
 
-    public Journal(String title, String publisher, String issn, int volume, int issue) {
-        super(title, publisher);
+    public Journal(String id, String title, String publisher, String issn, int volume, int issue) {
+        super(id, title, publisher);
         this.issn = validateIssn(issn);
         this.volume = validateVolume(volume);
         this.issue = validateIssue(issue);
     }
 
+    public Journal(String title, String publisher, String issn, int volume, int issue) {
+        this(null, title, publisher, issn, volume, issue);
+    }
+
+
     private String validateIssn(String issn) {
         if (issn == null || issn.trim().isEmpty()) {
             throw new IllegalArgumentException("ISSN cannot be empty");
         }
+        String trimmed = issn.trim();
+        // Allow safe defaults used during Firestore sync
+        if (trimmed.equals("0000-0000") || trimmed.equals("UNKNOWN-ISSN") || trimmed.equals("UNKNOWN")) {
+            return trimmed;
+        }
         // Basic ISSN validation: XXXX-XXXX format
-        if (!issn.matches("\\d{4}-\\d{3}[0-9X]")) {
+        if (!trimmed.matches("\\d{4}-\\d{3}[0-9X]")) {
             throw new IllegalArgumentException("Invalid ISSN format. Expected: XXXX-XXXX");
         }
-        return issn;
+        return trimmed;
     }
 
     private int validateVolume(int volume) {

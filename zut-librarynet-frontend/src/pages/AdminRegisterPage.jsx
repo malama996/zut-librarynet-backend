@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { Link, useNavigate } from 'react-router-dom';
+import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { MdPerson, MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
@@ -21,6 +21,7 @@ function AdminRegisterPage() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [newAdmin, setNewAdmin] = useState(null);
+    const navigate = useNavigate();
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -71,7 +72,7 @@ function AdminRegisterPage() {
                 uid: uid,
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
-                role: 'admin',
+                role: 'ADMIN',
                 status: 'active',
                 createdAt: new Date().toISOString(),
             });
@@ -93,6 +94,9 @@ function AdminRegisterPage() {
             } catch (apiErr) {
                 console.warn('[AdminRegister] Backend profile creation failed:', apiErr);
             }
+
+            // Step 6: Sign out to prevent auto-login (admin must log in manually)
+            await signOut(auth);
 
             setNewAdmin({
                 name: formData.name.trim(),
@@ -132,7 +136,7 @@ function AdminRegisterPage() {
                             Please log in with your credentials to access the admin panel.
                         </p>
                         <button
-                            onClick={() => window.location.href = '/login'}
+                            onClick={() => navigate('/login')}
                             style={{
                                 backgroundColor: '#dc2626', color: 'white',
                                 padding: '0.5rem 1.5rem', borderRadius: '0.5rem',

@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { BookOpen, AlertCircle, Clock, CheckCircle } from 'lucide-react';
-import { getMemberLoans, getMemberFines } from '../api/api';
+import { getMemberFines } from '../api/api';
+import { subscribeToCollection, COLLECTIONS } from '../firebase/firestoreService';
+
 import { useAuth } from '../contexts/AuthContext';
 
 function DashboardPage() {
@@ -20,51 +22,57 @@ function DashboardPage() {
   const [activeLoans, setActiveLoans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch dashboard data
+  // Real-time listener for loans + fetch fines
   useEffect(() => {
-    if (uid) {
-      fetchDashboardData();
-    }
+    if (!uid) return;
+
+    setIsLoading(true);
+
+    // Fetch fines (not real-time, changes less frequently)
+    const fetchFines = async () => {
+      try {
+        const finesResponse = await getMemberFines(uid);
+        const totalFines = finesResponse.data?.totalUnpaidFines || 0;
+        setStats(prev => ({ ...prev, fines: totalFines }));
+      } catch (error) {
+        console.error('Error fetching fines:', error);
+      }
+    };
+    fetchFines();
+
+    // Subscribe to loans for this user in real-time
+    const unsub = subscribeToCollection(
+      COLLECTIONS.LOANS,
+      (loans) => {
+        setActiveLoans(loans);
+
+        const now = new Date();
+        const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+        const overdueCount = loans.filter(loan => {
+          const dueDate = new Date(loan.dueDate);
+          return now > dueDate;
+        }).length;
+
+        const dueSoonCount = loans.filter(loan => {
+          const dueDate = new Date(loan.dueDate);
+          return dueDate >= now && dueDate <= threeDaysFromNow;
+        }).length;
+
+        setStats(prev => ({
+          ...prev,
+          currentlyBorrowed: loans.length,
+          dueSoon: dueSoonCount,
+          overdue: overdueCount,
+        }));
+        setIsLoading(false);
+      },
+      { where: ['userId', '==', uid] }
+    );
+
+    return () => unsub();
   }, [uid]);
 
-  const fetchDashboardData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch active loans
-      const loansResponse = await getMemberLoans(uid);
-      const loans = loansResponse.data?.activeLoans || [];
-      setActiveLoans(loans);
-
-      // Fetch fines
-      const finesResponse = await getMemberFines(uid);
-      const totalFines = finesResponse.data?.totalUnpaidFines || 0;
-
-      // Calculate stats
-      const now = new Date();
-      const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-
-      const overdueCount = loans.filter(loan => {
-        const dueDate = new Date(loan.dueDate);
-        return now > dueDate;
-      }).length;
-
-      const dueSoonCount = loans.filter(loan => {
-        const dueDate = new Date(loan.dueDate);
-        return dueDate >= now && dueDate <= threeDaysFromNow;
-      }).length;
-
-      setStats({
-        currentlyBorrowed: loans.length,
-        dueSoon: dueSoonCount,
-        overdue: overdueCount,
-        fines: totalFines,
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Format date
   const formatDate = (dateStr) => {
@@ -91,6 +99,21 @@ function DashboardPage() {
     const diff = now - due;
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   };
+
+  // Handle refresh
+  const handleRefresh = () => {
+    const refreshFines = async () => {
+      try {
+        const finesResponse = await getMemberFines(uid);
+        const totalFines = finesResponse.data?.totalUnpaidFines || 0;
+        setStats(prev => ({ ...prev, fines: totalFines }));
+      } catch (error) {
+        console.error('Error refreshing fines:', error);
+      }
+    };
+    refreshFines();
+  };
+
 
   return (
     <div className="space-y-8">
@@ -177,10 +200,11 @@ function DashboardPage() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Your Active Loans</h2>
-          <Button variant="outline" size="sm" onClick={fetchDashboardData}>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
             Refresh
           </Button>
         </div>
+
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
@@ -194,7 +218,8 @@ function DashboardPage() {
             ) : activeLoans.length > 0 ? (
               <div className="divide-y divide-gray-200">
                 {activeLoans.map((loan) => (
-                  <div key={loan.loanId} className="p-6 flex items-start justify-between hover:bg-gray-50">
+                  <div key={loan.id || loan.loanId} className="p-6 flex items-start justify-between hover:bg-gray-50">
+
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900">{loan.resourceTitle}</h3>
                       <p className="text-sm text-gray-500 mt-1">
@@ -255,4 +280,3 @@ function StatCard({ icon, label, value, color }) {
 }
 
 export default DashboardPage;
-

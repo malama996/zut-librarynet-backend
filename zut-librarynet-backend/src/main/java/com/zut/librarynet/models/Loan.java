@@ -20,21 +20,32 @@ public class Loan {
     // OBSERVER PATTERN: List of observers to notify when loan is closed
     private final List<LoanObserver> observers;
 
-    public Loan(Member member, LibraryResource resource) {
-        this.id = UUID.randomUUID().toString();
+    // Constructor for Firestore reconstruction - no side effects
+    public Loan(String id, Member member, LibraryResource resource, 
+                LocalDate borrowDate, LocalDate dueDate, 
+                LocalDate returnDate, String status) {
+        this.id = id != null && !id.trim().isEmpty() ? id : UUID.randomUUID().toString();
         this.member = member;
         this.resource = resource;
-        this.borrowDate = LocalDate.now();
-        this.dueDate = borrowDate.plusDays(member.getLoanPeriodDays());
-        this.status = "ACTIVE";
+        this.borrowDate = borrowDate;
+        this.dueDate = dueDate;
+        this.returnDate = returnDate;
+        this.status = status;
         this.observers = new ArrayList<>();
+    }
 
+    public Loan(Member member, LibraryResource resource) {
+        this(null, member, resource, LocalDate.now(), 
+             LocalDate.now().plusDays(member.getLoanPeriodDays()), 
+             null, "ACTIVE");
+        
         // Update resource availability
         resource.setAvailable(false);
 
         // Add to member's active loans
         member.addActiveLoan(this);
     }
+
 
     // Getters - no setters for immutable fields
     public String getId() { return id; }
@@ -46,7 +57,14 @@ public class Loan {
     public String getStatus() { return status; }
     public Fine getAssociatedFine() { return associatedFine; }
 
+    // Public setter for Firestore reconstruction
+    public void setAssociatedFine(Fine fine) {
+        this.associatedFine = fine;
+    }
+
+
     // OBSERVER PATTERN: Add observer
+
     public void addObserver(LoanObserver observer) {
         if (observer != null && !observers.contains(observer)) {
             observers.add(observer);
@@ -140,9 +158,37 @@ public class Loan {
         this.dueDate = dueDate.plusDays(additionalDays);
     }
 
+    public java.util.Map<String, Object> toMap() {
+        java.util.Map<String, Object> map = new java.util.HashMap<>();
+        map.put("id", this.id);
+        map.put("memberId", this.member.getId());
+        map.put("resourceId", this.resource.getId());
+        map.put("borrowDate", this.borrowDate.toString());
+        map.put("dueDate", this.dueDate.toString());
+        if (this.returnDate != null) {
+            map.put("returnDate", this.returnDate.toString());
+        }
+        map.put("status", this.status);
+        if (this.associatedFine != null) {
+            map.put("fineAmount", this.associatedFine.getAmount());
+            map.put("fineId", this.associatedFine.getId());
+        }
+        return map;
+    }
+
+    public static Loan fromFirestore(String id, Member member, LibraryResource resource,
+                                     String borrowDateStr, String dueDateStr,
+                                     String returnDateStr, String status) {
+        LocalDate borrowDate = LocalDate.parse(borrowDateStr);
+        LocalDate dueDate = LocalDate.parse(dueDateStr);
+        LocalDate returnDate = returnDateStr != null ? LocalDate.parse(returnDateStr) : null;
+        return new Loan(id, member, resource, borrowDate, dueDate, returnDate, status);
+    }
+
     @Override
     public String toString() {
         return String.format("Loan[%s]: %s borrowed %s, due %s",
                 id, resource.getTitle(), borrowDate, dueDate);
     }
+
 }

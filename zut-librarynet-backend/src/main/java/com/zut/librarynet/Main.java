@@ -7,6 +7,8 @@ import com.zut.librarynet.handlers.AuthHandlers;
 import com.zut.librarynet.handlers.AdminHandlers;
 import com.zut.librarynet.services.LibraryService;
 import com.zut.librarynet.services.AuthService;
+import com.zut.librarynet.services.OverdueChecker;
+
 import io.javalin.Javalin;
 import io.javalin.http.HttpStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +31,11 @@ public class Main {
 
         // Share LibraryService with AuthHandlers so member registration enables borrowing
         AuthHandlers.setLibraryService(libraryService);
+
+        // Start OverdueChecker scheduled job
+        OverdueChecker overdueChecker = new OverdueChecker(libraryService);
+        overdueChecker.start();
+
 
         // Configure Jackson
         ObjectMapper objectMapper = new ObjectMapper();
@@ -146,8 +153,10 @@ public class Main {
         // MEMBER ENDPOINTS
         // ============================================
 
+        app.post("/api/members/register", libraryHandlers::registerMember);
         app.get("/api/members/{id}", libraryHandlers::getMember);
         app.get("/api/members/{id}/loans", libraryHandlers::getMemberLoans);
+
         app.get("/api/members/{id}/fines", libraryHandlers::getMemberFines);
         app.post("/api/members/{id}/fines/{fineId}/pay", libraryHandlers::payFine);
         app.get("/api/members/{id}/reservations", libraryHandlers::getMemberReservations);
@@ -184,8 +193,10 @@ public class Main {
 
         // Statistics
         app.get("/api/admin/stats", adminHandlers::getStats);
+        app.get("/api/admin/dashboard", adminHandlers::getDashboard);
 
         // Reports
+
         app.get("/api/reports/overdue", libraryHandlers::getOverdueReport);
 
         System.out.println();

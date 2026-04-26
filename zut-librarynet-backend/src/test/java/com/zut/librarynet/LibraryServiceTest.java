@@ -361,16 +361,30 @@ public class LibraryServiceTest {
     @Test
     @Order(20)
     void testPhoneNumberValidation() {
-        Map<String, Object> invalidPhone = new HashMap<>();
-        invalidPhone.put("name", "Test User");
-        invalidPhone.put("email", "test@test.com");
-        invalidPhone.put("phone", "12345678");
-        invalidPhone.put("studentId", "2024001");
-        invalidPhone.put("programme", "CS");
-        invalidPhone.put("yearOfStudy", 2);
+        // Too short (only 5 digits)
+        Map<String, Object> shortPhone = new HashMap<>();
+        shortPhone.put("name", "Test User");
+        shortPhone.put("email", "test@test.com");
+        shortPhone.put("phone", "12345");
+        shortPhone.put("studentId", "2024001");
+        shortPhone.put("programme", "CS");
+        shortPhone.put("yearOfStudy", 2);
 
         assertThrows(IllegalArgumentException.class, () -> {
-            service.registerMember("student", invalidPhone);
+            service.registerMember("student", shortPhone);
+        });
+
+        // Contains letters
+        Map<String, Object> alphaPhone = new HashMap<>();
+        alphaPhone.put("name", "Test User");
+        alphaPhone.put("email", "test@test.com");
+        alphaPhone.put("phone", "abc123");
+        alphaPhone.put("studentId", "2024001");
+        alphaPhone.put("programme", "CS");
+        alphaPhone.put("yearOfStudy", 2);
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            service.registerMember("student", alphaPhone);
         });
     }
 
@@ -491,5 +505,198 @@ public class LibraryServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> {
             service.borrowResource(studentId, "invalid-id");
         });
+    }
+
+    // ============================================================
+    // CRITICAL BUSINESS RULE TESTS (Added during refactor)
+    // ============================================================
+
+    // TEST 31: BUSINESS RULE - Researcher can ONLY borrow journals
+    @Test
+    @Order(31)
+    void testBusinessRule_ResearcherCanOnlyBorrowJournals() {
+        // Researcher borrowing a book should fail
+        assertThrows(ResourceNotAvailableException.class, () -> {
+            service.borrowResource(researcherId, bookId);
+        });
+
+        // Researcher borrowing a digital resource should fail
+        assertThrows(ResourceNotAvailableException.class, () -> {
+            service.borrowResource(researcherId, digitalId);
+        });
+
+        // Researcher borrowing a journal should succeed
+        assertDoesNotThrow(() -> {
+            service.borrowResource(researcherId, journalId);
+        });
+    }
+
+    // TEST 32: Loan status transitions ACTIVE -> RETURNED
+    @Test
+    @Order(32)
+    void testLoanStatus_Returned() throws LibraryException {
+        Loan loan = service.borrowResource(studentId, bookId);
+        assertEquals("ACTIVE", loan.getStatus());
+        assertNull(loan.getReturnDate());
+
+        LibraryService.ReturnResult result = service.returnResource(loan.getId());
+        assertEquals("RETURNED", loan.getStatus());
+        assertNotNull(loan.getReturnDate());
+    }
+
+    // TEST 33: Loan status transitions ACTIVE -> OVERDUE
+    @Test
+    @Order(33)
+    void testLoanStatus_Overdue() {
+        Member student = service.getMember(studentId);
+        LibraryResource book = service.getResource(bookId);
+
+        // Create loan with past due date
+        Loan overdueLoan = Loan.fromFirestore(
+                "test-overdue-loan",
+                student,
+                book,
+                java.time.LocalDate.now().minusDays(20).toString(),
+                java.time.LocalDate.now().minusDays(5).toString(),
+                null,
+                "ACTIVE"
+        );
+
+        assertTrue(overdueLoan.isOverdue());
+        assertEquals("ACTIVE", overdueLoan.getStatus());
+
+        overdueLoan.markAsOverdue();
+        assertEquals("OVERDUE", overdueLoan.getStatus());
+    }
+
+    // TEST 34: Overdue report structure
+    @Test
+    @Order(34)
+    void testOverdueReport_Structure() {
+        Map<String, Object> report = service.getOverdueReport();
+
+        assertNotNull(report.get("generatedAt"));
+        assertNotNull(report.get("totalOverdue"));
+        assertNotNull(report.get("totalFinesOutstanding"));
+        assertNotNull(report.get("groupedByMemberType"));
+        assertNotNull(report.get("summaryByType"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, List<Map<String, Object>>> grouped =
+                (Map<String, List<Map<String, Object>>>) report.get("groupedByMemberType");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Map<String, Object>> summary =
+                (Map<String, Map<String, Object>>) report.get("summaryByType");
+
+        // Both maps should be consistent
+        assertEquals(grouped.keySet(), summary.keySet());
+    }
+
+    // TEST 35: Search with relevance scoring
+    @Test
+    @Order(35)
+    void testSearchResources_RelevanceScoring() {
+        List<LibraryResource> results = service.searchResources("Java Programming");
+        assertFalse(results.isEmpty());
+        // Exact/partial title match should be first
+        assertEquals("Java Programming: A Comprehensive Guide", results.get(0).getTitle());
+
+        // Search by ISBN
+        List<LibraryResource> isbnResults = service.searchResources("978-1492077991");
+        assertEquals(1, isbnResults.size());
+    }
+
+    // TEST 36: Duplicate resource prevention by ISBN/ISSN/URL
+    @Test
+    @Order(36)
+    void testDuplicateResourcePrevention() {
+        Map<String, Object> duplicateBook = new HashMap<>();
+        duplicateBook.put("title", "Duplicate Java Book");
+        duplicateBook.put("publisher", "Test Publisher");
+        duplicateBook.put("isbn", "978-1492077991"); // Same ISBN as existing
+        duplicateBook.put("author", "Different Author");
+        duplicateBook.put("edition", "2nd");
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            service.addResource("book", duplicateBook);
+        });
+    }
+
+    // TEST 37: Observer pattern - observers notified on loan close
+    @Test
+    @Order(37)
+    void testObserverPattern_NotifiedOnReturn() throws LibraryException {
+        Loan loan = service.borrowResource(studentId, bookId);
+
+        boolean[] notified = {false};
+        loan.addObserver((closedLoan, nextUser) -> {
+            notified[0] = true;
+        });
+
+        service.returnResource(loan.getId());
+        assertTrue(notified[0], "Observer should have been notified when loan was closed");
+    }
+
+    // TEST 38: Loan extension
+    @Test
+    @Order(38)
+    void testExtendLoan() throws LibraryException {
+        Loan loan = service.borrowResource(studentId, bookId);
+        java.time.LocalDate originalDueDate = loan.getDueDate();
+
+        service.extendLoan(loan.getId(), 7);
+
+        assertEquals(originalDueDate.plusDays(7), loan.getDueDate());
+    }
+
+    // TEST 39: Loan persistence to map (Firestore format)
+    @Test
+    @Order(39)
+    void testLoanToMap() throws LibraryException {
+        Loan loan = service.borrowResource(studentId, bookId);
+        Map<String, Object> map = loan.toMap();
+
+        assertNotNull(map.get("id"));
+        assertEquals(studentId, map.get("memberId"));
+        assertEquals(bookId, map.get("resourceId"));
+        assertEquals("ACTIVE", map.get("status"));
+        assertNotNull(map.get("borrowDate"));
+        assertNotNull(map.get("dueDate"));
+        assertNull(map.get("returnDate"));
+    }
+
+    // TEST 40: Digital resource error contains URL
+    @Test
+    @Order(40)
+    void testDigitalResourceErrorMessage() {
+        ResourceNotAvailableException ex = assertThrows(ResourceNotAvailableException.class, () -> {
+            service.borrowResource(studentId, digitalId);
+        });
+
+        assertTrue(ex.getMessage().contains("https://library.zut.edu.zm/digital"),
+                "Error should contain the digital resource URL");
+        assertTrue(ex.getMessage().contains("cannot be physically borrowed"),
+                "Error should explain digital resources can't be borrowed");
+    }
+
+    // TEST 41: DigitalResource.canBeBorrowed() returns false
+    @Test
+    @Order(41)
+    void testDigitalResource_CannotBeBorrowed() {
+        LibraryResource digital = service.getResource(digitalId);
+        assertFalse(digital.canBeBorrowed());
+        assertTrue(digital instanceof DigitalResource);
+    }
+
+    // TEST 42: Book and Journal can be borrowed
+    @Test
+    @Order(42)
+    void testPhysicalResources_CanBeBorrowed() {
+        LibraryResource book = service.getResource(bookId);
+        LibraryResource journal = service.getResource(journalId);
+
+        assertTrue(book.canBeBorrowed());
+        assertTrue(journal.canBeBorrowed());
     }
 }

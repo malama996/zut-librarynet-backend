@@ -1,5 +1,5 @@
 /**
- * EmailJS Service — sends real reservation notification emails.
+ * EmailJS Service — sends real reservation & overdue notification emails.
  *
  * Credentials come from .env (VITE_EMAILJS_* prefixed variables).
  *
@@ -9,9 +9,11 @@
  *   VITE_EMAILJS_PUBLIC_KEY   = your EmailJS public key
  *
  * EmailJS template variables (configure these in the EmailJS dashboard):
- *   {{to_name}}    — member's display name
- *   {{to_email}}   — member's email address
- *   {{book_title}}  — title of the resource now available
+ *   {{to_name}}      — member's display name
+ *   {{to_email}}     — member's email address
+ *   {{book_title}}   — title of the resource
+ *   {{days_overdue}} — days overdue (0 for reservations)
+ *   {{fine_amount}}  — fine amount in ZMW (0.00 for reservations)
  */
 
 const EMAILJS = {
@@ -27,13 +29,33 @@ const IS_CONFIGURED =
   EMAILJS.serviceId !== 'YOUR_SERVICE_ID';
 
 /**
- * Send a reservation notification email.
+ * Send a reservation-available email.
  *
  * @param {{ name: string, email: string }} user
  * @param {{ title: string }} book
  * @returns {{ success: boolean, demo?: boolean, error?: string }}
  */
 export async function sendReservationEmail(user, book) {
+  return sendEmail(user, book, '0', '0.00');
+}
+
+/**
+ * Send an overdue notice email.
+ *
+ * @param {{ name: string, email: string }} user
+ * @param {{ title: string }} book
+ * @param {number} daysOverdue
+ * @param {number} fineAmount
+ * @returns {{ success: boolean, demo?: boolean, error?: string }}
+ */
+export async function sendOverdueEmail(user, book, daysOverdue = 0, fineAmount = 0) {
+  return sendEmail(user, book, String(daysOverdue), fineAmount.toFixed(2));
+}
+
+/**
+ * Core email sender — used by reservation and overdue notifications.
+ */
+async function sendEmail(user, book, daysOverdue, fineAmount) {
   if (!user?.email || !user?.name) {
     console.warn('[EmailJS] Skipped — invalid user:', user);
     return { success: false };
@@ -46,9 +68,11 @@ export async function sendReservationEmail(user, book) {
   // Demo mode: log instead of sending
   if (!IS_CONFIGURED) {
     console.info(
-      `[EMAIL] Would send to: ${user.email}\n` +
+      `[EmailJS DEMO] To: ${user.email}\n` +
       `  Name: ${user.name}\n` +
-      `  Book: ${book.title}`
+      `  Book: ${book.title}\n` +
+      `  Days Overdue: ${daysOverdue}\n` +
+      `  Fine: ZMW ${fineAmount}`
     );
     return { success: true, demo: true };
   }
@@ -59,9 +83,11 @@ export async function sendReservationEmail(user, book) {
       EMAILJS.serviceId,
       EMAILJS.templateId,
       {
-        to_name:    user.name,
-        to_email:   user.email,
-        book_title: book.title,
+        to_name:      user.name,
+        to_email:     user.email,
+        book_title:   book.title,
+        days_overdue: daysOverdue,
+        fine_amount:  fineAmount,
       },
       EMAILJS.publicKey
     );
@@ -86,4 +112,5 @@ export function simulateEmailNotification(user, book) {
   return { success: true, simulated: true };
 }
 
-export default { sendReservationEmail };
+export default { sendReservationEmail, sendOverdueEmail };
+

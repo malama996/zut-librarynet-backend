@@ -7,20 +7,30 @@ public class DigitalResource extends LibraryResource {
     private String url;
     private LocalDate licenceExpiry;
 
-    public DigitalResource(String title, String publisher, String url, LocalDate licenceExpiry) {
-        super(title, publisher);
+    public DigitalResource(String id, String title, String publisher, String url, LocalDate licenceExpiry) {
+        super(id, title, publisher);
         this.url = validateUrl(url);
         this.licenceExpiry = licenceExpiry;
     }
+
+    public DigitalResource(String title, String publisher, String url, LocalDate licenceExpiry) {
+        this(null, title, publisher, url, licenceExpiry);
+    }
+
 
     private String validateUrl(String url) {
         if (url == null || url.trim().isEmpty()) {
             throw new IllegalArgumentException("URL cannot be empty");
         }
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        String trimmed = url.trim();
+        // Allow safe defaults used during Firestore sync
+        if (trimmed.equals("https://example.com") || trimmed.equals("http://example.com") || trimmed.equals("UNKNOWN")) {
+            return trimmed;
+        }
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             throw new IllegalArgumentException("URL must start with http:// or https://");
         }
-        return url;
+        return trimmed;
     }
 
     public String getUrl() { return url; }

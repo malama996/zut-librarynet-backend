@@ -39,15 +39,23 @@ export function AuthProvider({ children }) {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
-            setRole(data.role || 'student');
+            // FIX: Prefer memberType for specific roles (STUDENT/LECTURER/RESEARCHER)
+            // Only use role field if it's ADMIN, otherwise memberType takes precedence
+            let effectiveRole;
+            if (data.role === 'ADMIN' || data.role === 'admin') {
+              effectiveRole = 'ADMIN';
+            } else {
+              effectiveRole = (data.memberType || data.role || 'STUDENT').toUpperCase();
+            }
+            setRole(effectiveRole);
             if (data.name) setName(data.name);
           } else {
-            // No Firestore profile yet — default to student
-            setRole('student');
+            // No Firestore profile yet — default to STUDENT
+            setRole('STUDENT');
           }
         } catch (err) {
           console.error('[AuthContext] Error fetching user role:', err);
-          setRole('student');
+          setRole('STUDENT');
         }
       } else {
         setUser(null);
@@ -78,7 +86,7 @@ export function AuthProvider({ children }) {
     email,
     loading,
     isLoggedIn: !!user,
-    isAdmin: role === 'admin',
+    isAdmin: role === 'ADMIN' || role === 'admin',
     logout,
   };
 
@@ -98,4 +106,3 @@ export function useAuth() {
 }
 
 export default AuthContext;
-

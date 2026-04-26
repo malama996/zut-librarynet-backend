@@ -136,14 +136,20 @@ public class AuthService {
 
     /**
      * Fetch user role from Firestore users/{uid} document.
+     * CRITICAL FIX: Falls back to memberType if role field is missing.
      */
     private static String fetchUserRoleFromFirestore(String uid) {
         try {
             com.google.cloud.firestore.DocumentSnapshot doc = FirestoreClient.getDocument("users", uid);
             if (doc.exists()) {
                 String role = doc.getString("role");
-                if (role != null) {
+                if (role != null && !role.trim().isEmpty()) {
                     return role.toUpperCase();
+                }
+                // CRITICAL FIX: Fallback to memberType if role is missing
+                String memberType = doc.getString("memberType");
+                if (memberType != null && !memberType.trim().isEmpty()) {
+                    return memberType.toUpperCase();
                 }
             }
         } catch (Exception e) {
@@ -155,6 +161,7 @@ public class AuthService {
 
     /**
      * Fetch full user profile from Firestore.
+     * CRITICAL FIX: Uses memberType as role fallback.
      */
     public static User fetchUserFromFirestore(String uid) {
         try {
@@ -165,7 +172,13 @@ public class AuthService {
                 String role = doc.getString("role");
                 String memberType = doc.getString("memberType");
 
-                User user = new User(uid, name, email, "", role != null ? role.toUpperCase() : ROLE_MEMBER);
+                // CRITICAL FIX: Use memberType as role fallback
+                String effectiveRole = role;
+                if (effectiveRole == null || effectiveRole.trim().isEmpty()) {
+                    effectiveRole = memberType;
+                }
+
+                User user = new User(uid, name, email, "", effectiveRole != null ? effectiveRole.toUpperCase() : ROLE_MEMBER);
                 user.setMemberType(memberType);
                 return user;
             }

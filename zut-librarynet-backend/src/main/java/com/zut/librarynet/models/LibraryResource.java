@@ -17,13 +17,18 @@ public abstract class LibraryResource {
     private final LocalDateTime createdAt;
     private boolean available;
 
-    public LibraryResource(String title, String publisher) {
-        this.id = UUID.randomUUID().toString();
+    protected LibraryResource(String id, String title, String publisher) {
+        this.id = id != null && !id.trim().isEmpty() ? id : UUID.randomUUID().toString();
         this.title = validateTitle(title);
         this.publisher = validatePublisher(publisher);
         this.createdAt = LocalDateTime.now();
         this.available = true;
     }
+
+    public LibraryResource(String title, String publisher) {
+        this(null, title, publisher);
+    }
+
 
     // ENCAPSULATION: Validation methods protect data integrity
     private String validateTitle(String title) {

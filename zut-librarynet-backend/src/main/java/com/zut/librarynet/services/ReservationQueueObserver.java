@@ -22,10 +22,12 @@ public class ReservationQueueObserver implements LoanObserver {
     private final Map<String, Queue<Reservation>> reservationQueues;
     // Map of resource to list of observers
     private final Map<String, List<ReservationObserver>> observers;
+    private final EmailService emailService;
 
     private ReservationQueueObserver() {
         this.reservationQueues = new ConcurrentHashMap<>();
         this.observers = new ConcurrentHashMap<>();
+        this.emailService = EmailService.getInstance();
     }
 
     public static synchronized ReservationQueueObserver getInstance() {
@@ -45,13 +47,17 @@ public class ReservationQueueObserver implements LoanObserver {
 
     /**
      * OBSERVER PATTERN: Implementation of LoanObserver.onLoanClosed.
-     * This is called when a loan is closed, allowing us to process
-     * the reservation queue and notify the next user.
+     * This is called when a loan is closed. Email notification is already
+     * sent by notifyResourceReturned() via EmailNotificationObserver,
+     * so this method only logs the event.
      */
     @Override
     public synchronized void onLoanClosed(Loan loan, Member nextReservedUser) {
         String resourceId = loan.getResource().getId();
-        System.out.printf("[RESERVATION QUEUE] Processing queue for resource: %s%n", resourceId);
+        if (nextReservedUser != null) {
+            System.out.printf("[RESERVATION QUEUE] Resource %s returned, next user: %s%n",
+                resourceId, nextReservedUser.getName());
+        }
     }
 
     public synchronized Member notifyResourceReturned(Loan loan) {
@@ -123,19 +129,13 @@ public class ReservationQueueObserver implements LoanObserver {
         void onResourceAvailable(Reservation reservation);
     }
 
-    // Concrete Observer: Email Notification
-    public static class EmailNotificationObserver implements ReservationObserver {
+    // Concrete Observer: Email Notification using EmailService
+    public class EmailNotificationObserver implements ReservationObserver {
         @Override
         public void onResourceAvailable(Reservation reservation) {
-            // In production, this would send an actual email
-            System.out.printf("[EMAIL NOTIFICATION] To: %s (%s)%n",
-                    reservation.getMember().getName(),
-                    reservation.getMember().getEmail());
-            System.out.printf("Subject: Resource Available - %s%n",
-                    reservation.getResource().getTitle());
-            System.out.printf("Message: The resource '%s' you reserved is now available. "
-                            + "Please collect it within 7 days.%n%n",
-                    reservation.getResource().getTitle());
+            emailService.sendReservationAvailableEmail(
+                    reservation.getMember(),
+                    reservation.getResource());
         }
     }
 }

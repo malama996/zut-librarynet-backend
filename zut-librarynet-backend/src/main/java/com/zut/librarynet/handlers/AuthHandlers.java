@@ -163,7 +163,8 @@ public class AuthHandlers {
                 userData.put("uid", uid);
                 userData.put("name", name.trim());
                 userData.put("email", email != null ? email : decodedToken.getEmail());
-                userData.put("role", "MEMBER");
+                // FIX: Store specific member type as role so users show as Student/Lecturer/Researcher
+                userData.put("role", upperType);
                 userData.put("memberType", upperType);
                 userData.put("status", "active");
                 userData.put("createdAt", LocalDateTime.now().toString());

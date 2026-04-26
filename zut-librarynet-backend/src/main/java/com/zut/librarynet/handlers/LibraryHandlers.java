@@ -423,7 +423,7 @@ public class LibraryHandlers {
     public void getLoan(Context ctx) {
         try {
             String loanId = ctx.pathParam("id");
-            java.util.List<Loan> allLoans = service.getActiveLoans();
+            java.util.List<Loan> allLoans = service.getAllLoans();
 
             Loan found = null;
             for (Loan loan : allLoans) {

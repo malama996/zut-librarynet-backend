@@ -139,6 +139,7 @@ export const adminUpdateUser = (id, data) => api.put(`/admin/users/${id}`, data)
 export const adminGetAllLoans = () => api.get('/admin/loans');
 export const adminGetAllReservations = () => api.get('/admin/reservations');
 export const adminGetStats = () => api.get('/admin/stats');
+export const adminGetDashboard = () => api.get('/admin/dashboard');
 
 // ============================================================
 // FIRESTORE SYNC (Lazy import)

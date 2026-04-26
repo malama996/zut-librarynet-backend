@@ -207,9 +207,27 @@ public class AdminHandlers {
         }
     }
 
+    public void getDashboard(Context ctx) {
+        requireAdmin(ctx);
+        try {
+            if (libraryService == null) {
+                sendError(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Library service not initialized");
+                return;
+            }
+            Map<String, Object> metrics = libraryService.getDashboardMetrics();
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", metrics);
+            ctx.status(HttpStatus.OK).json(response);
+        } catch (Exception e) {
+            sendError(ctx, HttpStatus.INTERNAL_SERVER_ERROR, "Failed to fetch dashboard metrics: " + e.getMessage());
+        }
+    }
+
     public void getStats(Context ctx) {
         requireAdmin(ctx);
         try {
+
             Map<String, Object> stats = firestore.getStatistics();
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);

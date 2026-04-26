@@ -14,14 +14,21 @@ public class Reservation {
     private LocalDateTime fulfilledDate;
     private LocalDateTime expiryDate;
 
-    public Reservation(Member member, LibraryResource resource) {
-        this.id = UUID.randomUUID().toString();
+    public Reservation(String id, Member member, LibraryResource resource,
+                       LocalDateTime reservationDate, String status,
+                       LocalDateTime expiryDate) {
+        this.id = id != null && !id.trim().isEmpty() ? id : UUID.randomUUID().toString();
         this.member = member;
         this.resource = resource;
-        this.reservationDate = LocalDateTime.now();
-        this.status = "PENDING";
-        this.expiryDate = reservationDate.plusDays(7); // Reservations expire after 7 days
+        this.reservationDate = reservationDate;
+        this.status = status;
+        this.expiryDate = expiryDate;
     }
+
+    public Reservation(Member member, LibraryResource resource) {
+        this(null, member, resource, LocalDateTime.now(), "PENDING", LocalDateTime.now().plusDays(7));
+    }
+
 
     public String getId() { return id; }
     public Member getMember() { return member; }

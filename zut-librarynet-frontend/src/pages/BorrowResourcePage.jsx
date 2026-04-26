@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { toastSuccess, toastError } from '../lib/toast';
-import { getAllResources, borrowResource, createReservation } from '../api/api';
+import { borrowResource, createReservation, syncBorrow } from '../api/api';
+import { subscribeToCollection, COLLECTIONS } from '../firebase/firestoreService';
 import { useAuth } from '../hooks/useAuth';
 
 function BorrowResourcePage() {
@@ -15,56 +16,39 @@ function BorrowResourcePage() {
   const [borrowedResource, setBorrowedResource] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
-  // Fetch resources on mount
   useEffect(() => {
-    fetchResources();
-  }, []);
-
-  const fetchResources = async () => {
     setIsLoading(true);
-    try {
-      const response = await getAllResources();
-      if (response.data?.resources) {
-        setResources(response.data.resources);
-      } else if (Array.isArray(response.data)) {
-        setResources(response.data);
+    const unsub = subscribeToCollection(
+      COLLECTIONS.RESOURCES,
+      (data) => {
+        const borrowable = data.filter(r => (r.type || r.resourceType) !== 'Digital');
+        setResources(borrowable);
+        setIsLoading(false);
       }
-    } catch (error) {
-      toastError('Failed to load resources');
-      console.error('Error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    );
+    return () => unsub();
+  }, []);
 
   const handleBorrow = async (resource) => {
     if (!uid) {
       toastError('Please log in to borrow');
       return;
     }
-
     setSelectedResource(resource);
     setActionLoading(resource.id);
-
     try {
       const response = await borrowResource(uid, resource.id);
-      setBorrowedResource({
-        ...resource,
-        dueDate: response.data?.dueDate,
-      });
+      const loanData = response.data;
+      setBorrowedResource({ ...resource, dueDate: loanData?.dueDate });
       toastSuccess(`Successfully borrowed "${resource.title}"!`);
-
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => {
-        setBorrowedResource(null);
-      }, 5000);
-
-      // Refresh resources
-      fetchResources();
+      try {
+        await syncBorrow(loanData, { id: resource.id });
+      } catch (syncErr) {
+        console.warn('[BorrowPage] Firestore sync failed:', syncErr);
+      }
+      setTimeout(() => setBorrowedResource(null), 5000);
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to borrow';
-
-      // If not available, offer to reserve
       if (message.includes('on loan') || message.includes('not available')) {
         toastError(message);
         handleReserve(resource);
@@ -78,37 +62,24 @@ function BorrowResourcePage() {
   };
 
   const handleReserve = async (resource) => {
-    if (!uid) {
-      toastError('Please log in to reserve');
-      return;
-    }
-
+    if (!uid) { toastError('Please log in to reserve'); return; }
     setActionLoading(resource.id);
-
     try {
       await createReservation(uid, resource.id);
       toastSuccess(`Reserved "${resource.title}". You'll be notified when available.`);
     } catch (error) {
-      const message = error.response?.data?.message || 'Failed to reserve';
-      toastError(message);
+      toastError(error.response?.data?.message || 'Failed to reserve');
     } finally {
       setActionLoading(null);
       setSelectedResource(null);
     }
   };
 
-  // Format due date
   const formatDueDate = (dueDateStr) => {
     if (!dueDateStr) return '14 days from now';
     try {
-      return new Date(dueDateStr).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch {
-      return '14 days from now';
-    }
+      return new Date(dueDateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch { return '14 days from now'; }
   };
 
   return (
@@ -117,8 +88,6 @@ function BorrowResourcePage() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Borrow Resource</h1>
         <p className="text-gray-600">Select a resource to borrow from the library</p>
       </div>
-
-      {/* Success Message */}
       {borrowedResource && (
         <Card className="bg-green-50 border-2 border-green-300">
           <CardContent className="p-6">
@@ -128,19 +97,14 @@ function BorrowResourcePage() {
                 <h3 className="font-bold text-green-900 mb-2">Borrow Successful!</h3>
                 <p className="text-green-700">You have successfully borrowed:</p>
                 <p className="font-semibold text-green-900 mt-2">{borrowedResource.title}</p>
-                <p className="text-sm text-green-700 mt-1">
-                  Due back by: {formatDueDate(borrowedResource.dueDate)}
-                </p>
+                <p className="text-sm text-green-700 mt-1">Due back by: {formatDueDate(borrowedResource.dueDate)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Resources Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
-          // Loading skeleton
           [...Array(6)].map((_, i) => (
             <Card key={i} className="animate-pulse">
               <CardContent className="p-6 space-y-4">
@@ -153,43 +117,15 @@ function BorrowResourcePage() {
           ))
         ) : resources.length > 0 ? (
           resources.map((resource) => (
-            <Card
-              key={resource.id}
-              className={selectedResource?.id === resource.id ? 'ring-2 ring-blue-500' : ''}
-            >
-              <CardHeader>
-                <CardTitle className="text-lg">{resource.title}</CardTitle>
-              </CardHeader>
+            <Card key={resource.id} className={selectedResource?.id === resource.id ? 'ring-2 ring-blue-500' : ''}>
+              <CardHeader><CardTitle className="text-lg">{resource.title}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-500">Type</p>
-                  <Badge>{resource.type || resource.resourceType}</Badge>
-                </div>
-                {resource.isbn && (
-                  <div>
-                    <p className="text-sm text-gray-500">ISBN</p>
-                    <p className="font-mono text-sm">{resource.isbn}</p>
-                  </div>
-                )}
-                {resource.author && (
-                  <div>
-                    <p className="text-sm text-gray-500">Author</p>
-                    <p className="text-sm">{resource.author}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <Badge variant={resource.available ? 'success' : 'destructive'}>
-                    {resource.available ? 'Available' : 'Unavailable'}
-                  </Badge>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={() => handleBorrow(resource)}
-                  disabled={actionLoading === resource.id || !resource.available}
-                >
-                  {actionLoading === resource.id ? 'Processing...' :
-                    resource.available ? 'Borrow This Resource' : 'Reserve'}
+                <div><p className="text-sm text-gray-500">Type</p><Badge>{resource.type || resource.resourceType}</Badge></div>
+                {resource.isbn && <div><p className="text-sm text-gray-500">ISBN</p><p className="font-mono text-sm">{resource.isbn}</p></div>}
+                {resource.author && <div><p className="text-sm text-gray-500">Author</p><p className="text-sm">{resource.author}</p></div>}
+                <div><p className="text-sm text-gray-500">Status</p><Badge variant={resource.available ? 'success' : 'destructive'}>{resource.available ? 'Available' : 'Unavailable'}</Badge></div>
+                <Button className="w-full" onClick={() => handleBorrow(resource)} disabled={actionLoading === resource.id || !resource.available}>
+                  {actionLoading === resource.id ? 'Processing...' : resource.available ? 'Borrow This Resource' : 'Reserve'}
                 </Button>
               </CardContent>
             </Card>
@@ -198,9 +134,7 @@ function BorrowResourcePage() {
           <Card className="col-span-full">
             <CardContent className="p-12 text-center">
               <p className="text-gray-500">No resources available. Check back later.</p>
-              <Button className="mt-4" onClick={fetchResources}>
-                Refresh
-              </Button>
+              <Button className="mt-4" onClick={() => window.location.reload()}>Refresh</Button>
             </CardContent>
           </Card>
         )}
@@ -210,4 +144,3 @@ function BorrowResourcePage() {
 }
 
 export default BorrowResourcePage;
-

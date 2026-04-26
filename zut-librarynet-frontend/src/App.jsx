@@ -23,10 +23,10 @@ import AppShell from './layouts/AppShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function AppRoutes() {
-  const { isLoggedIn, name, role, logout } = useAuth();
+  const { isLoggedIn, name, role, logout, isAdmin } = useAuth();
 
   const getDefaultRoute = () => {
-    return role === 'admin' ? '/admin' : '/';
+    return isAdmin ? '/admin' : '/';
   };
 
   const memberNav = [
@@ -42,7 +42,7 @@ function AppRoutes() {
     { path: '/admin', icon: MdAssignment, label: 'Admin Panel', color: '#dc2626' },
   ];
 
-  const navLinks = role === 'admin' ? adminNav : memberNav;
+  const navLinks = isAdmin ? adminNav : memberNav;
 
   return (
     <Router>
@@ -54,7 +54,7 @@ function AppRoutes() {
           navLinks={navLinks}
         >
           <Routes>
-            {role === 'admin' ? (
+            {isAdmin ? (
               <Route path="/admin" element={<AdminDashboard />} />
             ) : (
               <>

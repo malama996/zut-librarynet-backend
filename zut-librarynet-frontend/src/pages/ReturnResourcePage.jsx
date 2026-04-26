@@ -4,9 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { toastSuccess, toastError } from '../lib/toast';
-import { getMemberLoans, returnResource, extendLoan } from '../api/api';
-import { updateResourceAvailability, updateLoanStatus } from '../firebase';
-import { sendReservationEmail } from '../services/emailService';
+import { returnResource, extendLoan, getMemberLoans } from '../api/api';
+import { updateResourceAvailability, updateLoanStatus, subscribeToCollection, COLLECTIONS } from '../firebase/firestoreService';
 import { useAuth } from '../hooks/useAuth';
 
 function ReturnResourcePage() {
@@ -17,22 +16,68 @@ function ReturnResourcePage() {
   const [returnResult, setReturnResult] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Fetch active loans from backend API + Firestore real-time sync
   useEffect(() => {
-    if (uid) fetchLoans();
-  }, [uid]);
-
-  const fetchLoans = async () => {
-    setIsLoading(true);
-    try {
-      const response = await getMemberLoans(uid);
-      if (response.data?.activeLoans) setActiveLoans(response.data.activeLoans);
-      else if (Array.isArray(response.data)) setActiveLoans(response.data);
-    } catch {
-      toastError('Failed to load loans');
-    } finally {
+    if (!uid) {
       setIsLoading(false);
+      return;
     }
-  };
+
+    setIsLoading(true);
+
+    // Primary: Fetch from backend API
+    const fetchFromBackend = async () => {
+      try {
+        const response = await getMemberLoans(uid);
+        if (response.data?.activeLoans) {
+          const backendLoans = response.data.activeLoans.map(loan => ({
+            id: loan.loanId || loan.id,
+            loanId: loan.loanId || loan.id,
+            resourceId: loan.resourceId,
+            resourceTitle: loan.resourceTitle || 'Unknown Resource',
+            borrowDate: loan.borrowDate,
+            dueDate: loan.dueDate,
+            status: loan.status,
+            fineAmount: loan.fineAmount || 0,
+          }));
+          setActiveLoans(backendLoans);
+        }
+      } catch (err) {
+        console.warn('[ReturnPage] Backend fetch failed:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchFromBackend();
+
+    // Secondary: Firestore real-time updates
+    const unsub = subscribeToCollection(
+      COLLECTIONS.LOANS,
+      (data) => {
+        const firestoreLoans = data
+          .filter(l => (l.status === 'ACTIVE' || l.status === 'OVERDUE') && l.userId === uid)
+          .map(l => ({
+            id: l.id || l.loanId,
+            loanId: l.loanId || l.id,
+            resourceId: l.resourceId,
+            resourceTitle: l.resourceTitle || 'Unknown Resource',
+            borrowDate: l.borrowDate,
+            dueDate: l.dueDate,
+            status: l.status,
+            fineAmount: l.fineAmount || 0,
+          }));
+        // Merge Firestore data with backend data (prefer backend for completeness)
+        setActiveLoans(prev => {
+          const backendIds = new Set(prev.map(p => p.loanId));
+          const newLoans = firestoreLoans.filter(fl => !backendIds.has(fl.loanId));
+          return [...prev, ...newLoans];
+        });
+      }
+    );
+
+    return () => unsub();
+  }, [uid]);
 
   const handleReturn = async () => {
     if (!selectedLoan) {
@@ -57,19 +102,18 @@ function ReturnResourcePage() {
       toastSuccess('Resource returned!');
 
       // Sync to Firestore
-      await updateLoanStatus(selectedLoan.loanId, 'RETURNED', data.fineAmount || 0);
-      await updateResourceAvailability(selectedLoan.resourceId, true);
-
-      // Send email notification to next reserved user
-      if (data.nextReservedUser) {
-        await sendReservationEmail(
-          { name: data.nextReservedUser.name, email: data.nextReservedUser.email },
-          { title: selectedLoan.resourceTitle }
-        );
+      try {
+        await updateLoanStatus(selectedLoan.loanId, 'RETURNED', data.fineAmount || 0);
+        await updateResourceAvailability(selectedLoan.resourceId, true);
+      } catch (syncErr) {
+        console.warn('[ReturnPage] Firestore sync failed:', syncErr);
       }
 
+      // Note: Backend sends email notification to next reserved user automatically
+
+      // Remove the returned loan from the list
+      setActiveLoans(prev => prev.filter(l => l.loanId !== selectedLoan.loanId));
       setSelectedLoan(null);
-      fetchLoans();
 
       setTimeout(() => setReturnResult(null), 5000);
     } catch (error) {
@@ -88,8 +132,20 @@ function ReturnResourcePage() {
     try {
       await extendLoan(selectedLoan.loanId, days);
       toastSuccess(`Extended ${days} days!`);
-      fetchLoans();
       setSelectedLoan(null);
+      // Refresh loans
+      const response = await getMemberLoans(uid);
+      if (response.data?.activeLoans) {
+        setActiveLoans(response.data.activeLoans.map(loan => ({
+          id: loan.loanId || loan.id,
+          loanId: loan.loanId || loan.id,
+          resourceId: loan.resourceId,
+          resourceTitle: loan.resourceTitle || 'Unknown Resource',
+          borrowDate: loan.borrowDate,
+          dueDate: loan.dueDate,
+          status: loan.status,
+        })));
+      }
     } catch (error) {
       toastError(error.response?.data?.message || 'Failed to extend');
     } finally {
@@ -99,13 +155,19 @@ function ReturnResourcePage() {
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A';
 
+  const isOverdue = (dueDate) => {
+    if (!dueDate) return false;
+    return new Date(dueDate) < new Date();
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Return Resource</h1>
-        <p className="text-gray-600">Return a borrowed resource</p>
+        <p className="text-gray-600">Return or extend a borrowed resource</p>
       </div>
 
+      {/* Success / Result Message */}
       {returnResult && (
         <Card className={`border-2 ${returnResult.fine > 0 ? 'bg-yellow-50 border-yellow-300' : 'bg-green-50 border-green-300'}`}>
           <CardContent className="p-6">
@@ -130,6 +192,7 @@ function ReturnResourcePage() {
         </Card>
       )}
 
+      {/* Selected Loan Return/Extend Panel */}
       {selectedLoan && (
         <Card className="bg-blue-50 border-blue-300">
           <CardHeader><CardTitle>Return Details</CardTitle></CardHeader>
@@ -137,11 +200,17 @@ function ReturnResourcePage() {
             <div><p className="font-semibold">{selectedLoan.resourceTitle}</p></div>
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-sm text-gray-600">Borrowed</p><p>{formatDate(selectedLoan.borrowDate)}</p></div>
-              <div><p className="text-sm text-gray-600">Due</p><p>{formatDate(selectedLoan.dueDate)}</p></div>
+              <div>
+                <p className="text-sm text-gray-600">Due</p>
+                <p className={isOverdue(selectedLoan.dueDate) ? 'text-red-600 font-bold' : ''}>
+                  {formatDate(selectedLoan.dueDate)}
+                  {isOverdue(selectedLoan.dueDate) && ' (OVERDUE)'}
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button className="flex-1" onClick={handleReturn} disabled={actionLoading}>
-                {actionLoading ? 'Processing...' : 'Return'}
+                {actionLoading ? 'Processing...' : 'Return Resource'}
               </Button>
               <Button variant="outline" onClick={() => handleExtend(14)} disabled={actionLoading}>
                 Extend 14 Days
@@ -152,8 +221,9 @@ function ReturnResourcePage() {
         </Card>
       )}
 
+      {/* Active Loans List */}
       <div>
-        <h2 className="text-xl font-bold mb-4">Your Active Loans</h2>
+        <h2 className="text-xl font-bold mb-4">Your Active Loans ({activeLoans.length})</h2>
         {isLoading ? (
           <div className="animate-pulse space-y-4">
             {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-200 rounded"></div>)}
@@ -163,23 +233,31 @@ function ReturnResourcePage() {
             {activeLoans.map(loan => (
               <Card
                 key={loan.loanId}
-                className={`${selectedLoan?.loanId === loan.loanId ? 'ring-2 ring-blue-500' : ''}`}
+                className={`${selectedLoan?.loanId === loan.loanId ? 'ring-2 ring-blue-500' : ''} ${isOverdue(loan.dueDate) ? 'border-red-300' : ''}`}
                 onClick={() => setSelectedLoan(loan)}
               >
-                <CardContent className="p-6 flex justify-between">
+                <CardContent className="p-6 flex justify-between items-center">
                   <div>
                     <h3 className="font-semibold">{loan.resourceTitle}</h3>
-                    <p className="text-sm text-gray-600">Due: {formatDate(loan.dueDate)}</p>
+                    <p className={`text-sm ${isOverdue(loan.dueDate) ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                      Due: {formatDate(loan.dueDate)}
+                      {isOverdue(loan.dueDate) && ' (OVERDUE)'}
+                    </p>
                   </div>
                   <Button variant={selectedLoan?.loanId === loan.loanId ? 'default' : 'outline'}>
-                    {selectedLoan?.loanId === loan.loanId ? 'Selected' : 'Select'}
+                    {selectedLoan?.loanId === loan.loanId ? 'Selected' : 'Select to Return'}
                   </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : (
-          <Card><CardContent className="p-12 text-center text-gray-500">No active loans</CardContent></Card>
+          <Card>
+            <CardContent className="p-12 text-center text-gray-500">
+              <p>No active loans found.</p>
+              <p className="text-sm mt-2">Resources you borrow will appear here.</p>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

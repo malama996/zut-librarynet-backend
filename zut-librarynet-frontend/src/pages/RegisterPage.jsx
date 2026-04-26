@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
@@ -66,6 +66,7 @@ function RegisterPage() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [newUser, setNewUser] = useState(null);
+    const navigate = useNavigate();
 
     const type = MEMBER_TYPES[memberType];
 
@@ -125,7 +126,7 @@ function RegisterPage() {
                 uid: uid,
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
-                role: type.role,
+                role: memberType,  // CRITICAL FIX: Store uppercase role (STUDENT/LECTURER/RESEARCHER)
                 status: 'active',
                 memberType: memberType,
                 createdAt: new Date().toISOString(),
@@ -201,7 +202,7 @@ function RegisterPage() {
                             Please log in with your credentials to access your dashboard.
                         </p>
                         <button
-                            onClick={() => window.location.href = '/login'}
+                            onClick={() => navigate('/login')}
                             style={{
                                 backgroundColor: '#22c55e', color: 'white',
                                 padding: '0.5rem 1.5rem', borderRadius: '0.5rem',

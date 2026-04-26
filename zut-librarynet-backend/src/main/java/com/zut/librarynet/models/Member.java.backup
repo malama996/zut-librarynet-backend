@@ -69,14 +69,10 @@ public abstract class Member {
         if (phone == null || phone.trim().isEmpty()) {
             throw new IllegalArgumentException("Phone cannot be empty");
         }
-        phone = phone.trim();
-        // Allow safe defaults used during Firestore sync
-        if (phone.equals("N/A") || phone.equals("Not provided") || phone.equals("UNKNOWN")) {
-            return phone;
-        }
         // UPDATED: Accept international phone numbers
         // Allow: +1234567890, 0977123456, etc.
         // Format: optional + followed by 6-15 digits
+        phone = phone.trim();
         if (!phone.matches("^[+]?[0-9]{6,15}$")) {
             throw new IllegalArgumentException("Invalid phone number. Must be 6-15 digits (with optional + prefix)");
         }

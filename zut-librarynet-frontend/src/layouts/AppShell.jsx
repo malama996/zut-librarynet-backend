@@ -124,7 +124,15 @@ function AppShell({ children, userName, userRole, onLogout, navLinks }) {
             </p>
           </div>
           <Badge variant="outline" className="text-blue-100 border-blue-600 mb-4 block">
-            {userRole === 'ADMIN' ? 'Administrator' : 'Member'}
+            {userRole === 'ADMIN'
+              ? 'Administrator'
+              : userRole === 'STUDENT'
+              ? 'Student'
+              : userRole === 'LECTURER'
+              ? 'Lecturer'
+              : userRole === 'RESEARCHER'
+              ? 'Researcher'
+              : 'Member'}
           </Badge>
           <Button
             variant="ghost"
