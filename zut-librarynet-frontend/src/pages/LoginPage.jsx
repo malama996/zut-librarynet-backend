@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { MdLock, MdLibraryBooks } from 'react-icons/md';
+import { MdLock } from 'react-icons/md';
+import logoImg from '../assets/logo.png';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
@@ -62,13 +63,16 @@ function LoginPage() {
         <AuthLayout>
             <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
-                    <MdLibraryBooks style={{ fontSize: '3.5rem', color: 'white' }} />
+                    <img src={logoImg} alt="ZUT Logo" style={{ height: '6rem', width: 'auto', dropShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
                 </div>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'white', marginBottom: '0.75rem' }}>
                     ZUT LibraryNet
                 </h1>
                 <p style={{ fontSize: '1.125rem', color: 'rgba(255,255,255,0.95)', fontWeight: 500 }}>
                     University Library Management System
+                </p>
+                <p style={{ marginTop: '1rem', fontSize: '1rem', color: 'white', fontWeight: 'bold', maxWidth: '450px', margin: '1rem auto 0 auto', lineHeight: '1.4' }}>
+                    "Welcome back to ZUT LibraryNet! We're thrilled to see you again. Dive back into a world of knowledge, research, and limitless discovery."
                 </p>
             </div>
 
@@ -135,6 +139,30 @@ function LoginPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <div style={{
+                marginTop: '3rem',
+                display: 'flex',
+                gap: '3rem',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                color: 'white',
+                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <h3 style={{ fontSize: '1.75rem', fontWeight: '900', margin: 0, color: '#facc15' }}>10k+</h3>
+                    <p style={{ fontSize: '0.875rem', fontWeight: '600', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resources</p>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <h3 style={{ fontSize: '1.75rem', fontWeight: '900', margin: 0, color: '#60a5fa' }}>5k+</h3>
+                    <p style={{ fontSize: '0.875rem', fontWeight: '600', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scholars</p>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <h3 style={{ fontSize: '1.75rem', fontWeight: '900', margin: 0, color: '#4ade80' }}>24/7</h3>
+                    <p style={{ fontSize: '0.875rem', fontWeight: '600', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cloud Access</p>
+                </div>
+            </div>
+
         </AuthLayout>
     );
 }

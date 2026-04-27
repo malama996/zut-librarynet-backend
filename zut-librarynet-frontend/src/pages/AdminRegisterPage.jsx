@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { MdPerson, MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
+import { MdPerson, MdCheckCircle } from 'react-icons/md';
+import logoImg from '../assets/logo.png';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
@@ -54,6 +55,7 @@ function AdminRegisterPage() {
         }
 
         setLoading(true);
+        sessionStorage.setItem('isRegistering', 'true');
         try {
             // Step 1: Firebase Auth signup
             const userCredential = await createUserWithEmailAndPassword(
@@ -116,6 +118,7 @@ function AdminRegisterPage() {
                 : error.message || 'Admin registration failed';
             toastError(message);
         } finally {
+            sessionStorage.removeItem('isRegistering');
             setLoading(false);
         }
     };
@@ -155,12 +158,15 @@ function AdminRegisterPage() {
         <AuthLayout>
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                    <MdLibraryBooks style={{ fontSize: '3rem', color: 'white' }} />
+                    <img src={logoImg} alt="ZUT Logo" style={{ height: '6rem', width: 'auto', dropShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
                 </div>
                 <h1 style={{ fontSize: '2rem', fontWeight: 700, color: 'white', marginBottom: '0.5rem' }}>
                     Admin Registration
                 </h1>
                 <p style={{ color: 'rgba(255,255,255,0.9)' }}>Register as system administrator</p>
+                <p style={{ marginTop: '0.75rem', fontSize: '0.95rem', color: 'white', fontWeight: 'bold', maxWidth: '450px', margin: '0.75rem auto 0 auto', lineHeight: '1.4' }}>
+                    "Take control of the digital library ecosystem. Register as an administrator to manage resources, monitor user activity, and maintain system integrity."
+                </p>
             </div>
 
             <Card style={{ maxWidth: '440px', margin: '0 auto' }}>

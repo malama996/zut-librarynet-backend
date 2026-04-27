@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { MdLibraryBooks, MdCheckCircle } from 'react-icons/md';
+import { MdCheckCircle, MdSchool, MdPerson, MdScience } from 'react-icons/md';
+import logoImg from '../assets/logo.png';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { FormGroup, Label, Input, FormError } from '../components/ui/Form';
@@ -14,7 +15,7 @@ import { registerMemberProfile } from '../api/api';
 const MEMBER_TYPES = {
     STUDENT: {
         label: 'Student',
-        icon: '🎓',
+        icon: <MdSchool />,
         idLabel: 'Student ID',
         idName: 'studentId',
         idHint: 'Format: STU1234  (STU prefix + 4 or more digits)',
@@ -27,7 +28,7 @@ const MEMBER_TYPES = {
     },
     LECTURER: {
         label: 'Lecturer',
-        icon: '👨\u200d🏫',
+        icon: <MdPerson />,
         idLabel: 'Employee ID',
         idName: 'employeeId',
         idHint: 'Format: EMP01  (EMP prefix + 2 or more digits)',
@@ -40,7 +41,7 @@ const MEMBER_TYPES = {
     },
     RESEARCHER: {
         label: 'Researcher',
-        icon: '🔬',
+        icon: <MdScience />,
         idLabel: 'Researcher ID',
         idName: 'researcherId',
         idHint: 'Format: RES01  (RES prefix + 2 or more digits)',
@@ -108,6 +109,7 @@ function RegisterPage() {
         if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
         setLoading(true);
+        sessionStorage.setItem('isRegistering', 'true');
         try {
             // Step 1: Firebase Auth signup
             const userCredential = await createUserWithEmailAndPassword(
@@ -178,6 +180,7 @@ function RegisterPage() {
                 : error.message || 'Registration failed';
             toastError(message);
         } finally {
+            sessionStorage.removeItem('isRegistering');
             setLoading(false);
         }
     };
@@ -221,10 +224,13 @@ function RegisterPage() {
         <AuthLayout>
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                    <MdLibraryBooks style={{ fontSize: '3rem', color: 'white' }} />
+                    <img src={logoImg} alt="ZUT Logo" style={{ height: '6rem', width: 'auto', dropShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
                 </div>
                 <h1 style={{ fontSize: '2rem', fontWeight: 700, color: 'white' }}>Member Registration</h1>
                 <p style={{ color: 'rgba(255,255,255,0.9)' }}>Create your library account</p>
+                <p style={{ marginTop: '0.75rem', fontSize: '0.95rem', color: 'white', fontWeight: 'bold', maxWidth: '450px', margin: '0.75rem auto 0 auto', lineHeight: '1.4' }}>
+                    "Join our vibrant community of scholars and explorers. Register today to unlock exclusive access to thousands of books, academic journals, and digital resources!"
+                </p>
             </div>
 
             <Card style={{ maxWidth: '520px', margin: '0 auto' }}>

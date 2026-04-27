@@ -60,7 +60,6 @@ const ReservationManagement = () => {
     };
 
     const handleCancel = async (reservationId, title) => {
-        if (!confirm('Cancel reservation for ' + title + '?')) return;
         setLoading(true);
         try {
             await cancelReservation(reservationId);

@@ -28,6 +28,12 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Prevent dashboard flash during registration flow
+      if (sessionStorage.getItem('isRegistering') === 'true') {
+        if (loading) setLoading(false);
+        return;
+      }
+
       if (firebaseUser) {
         setUser(firebaseUser);
         setUid(firebaseUser.uid);
